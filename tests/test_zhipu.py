@@ -16,12 +16,19 @@ class TestZhipuAIProvider(unittest.TestCase):
             api_key="e3833c6712b25eb4d89babd15c8134f5.Do904yhEYxDjewxI"
         )
 
+    # def test_completion(self):
+    #     model = "GLM-4"
+    #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
+    #     response = self.provider.completion(model=model, messages=messages)
+    #     model_response = create_model_response(response, model=model)
+    #     self.assertIsNotNone(model_response)
+
     def test_completion(self):
-        model = "your_model_name"
+        model = "GLM-4"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-        response = self.provider.completion(model="GLM-4", messages=messages)
-        model_response = create_model_response(response, model="GLM-4")
-        self.assertIsNotNone(model_response)
+        response = self.provider.completion(model=model, messages=messages, stream=True)
+        print("response: ", response)
+        self.assertIsNotNone(response)
 
 
 if __name__ == "__main__":

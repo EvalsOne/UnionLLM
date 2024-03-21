@@ -236,13 +236,13 @@ def convert_parameters(parameters: dict) -> dict:
     return parameters
 
 def create_model_response(openai_response: openai.ChatCompletion, model: str) -> ModelResponse:
-    print("openai_response: ", openai_response)
+    # print("openai_response: ", openai_response)
     choices = []
 
     for choice in openai_response.choices:
-        print("choice.message.content: ", choice.message.content)
+        # print("choice.message.content: ", choice.message.content)
         message = Message(content=choice.message.content, role=choice.message.role)
-        print("message: ", message)
+        # print("message: ", message)
         choices.append(Choices(message=message, index=choice.index, finish_reason=choice.finish_reason))
 
     usage = Usage(
@@ -251,7 +251,7 @@ def create_model_response(openai_response: openai.ChatCompletion, model: str) ->
         total_tokens=openai_response.usage.total_tokens
     )
 
-    print("choices: ", choices)
+    # print("choices: ", choices)
 
     response =  ModelResponse(
         id=openai_response.id,
@@ -260,5 +260,5 @@ def create_model_response(openai_response: openai.ChatCompletion, model: str) ->
         model=model,
         usage=usage
     )
-    print("response: ", response)
+    # print("response: ", response)
     return response

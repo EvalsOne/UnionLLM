@@ -1,0 +1,46 @@
+[
+  {
+    "model": "GLM-4",
+    "created": 1711009688,
+    "choices": [
+      {
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+          "content": "你好！很抱歉，作为一个AI，我无法提供实时的天气信息。你可以通过查看当地的天气预报来获取最新的天气情况。如果有其他问题或需要帮助，请随时告诉我！",
+          "role": "assistant",
+          "tool_calls": null
+        }
+      }
+    ],
+    "request_id": "8494924280512801895",
+    "id": "8494924280512801895",
+    "usage": {
+      "prompt_tokens": 11,
+      "completion_tokens": 40,
+      "total_tokens": 51
+    }
+  },
+  {
+    "id": "chatcmpl-4f5779bbcd184b3fb71429538cc960c8",
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "很抱歉，我无法实时提供天气信息。建议您查看可靠的天气网站或使用手机应用程序来获取当地的天气信息。",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 5707630,
+    "model": "moonshot-v1-8k",
+    "object": "chat.completion",
+    "system_fingerprint": null,
+    "usage": {
+      "prompt_tokens": 9,
+      "completion_tokens": 26,
+      "total_tokens": 35
+    }
+  }
+]

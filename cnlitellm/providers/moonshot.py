@@ -20,21 +20,16 @@ class MoonshotAIProvider(BaseProvider):
         if stream:
 
             def generate_stream():
-                result = self.client.chat.completions.create(
+                response = self.client.chat.completions.create(
                     model=model, messages=messages, **kwargs
                 )
-
                 collected_messages = []
-                for idx, chunk in enumerate(result):
+                for chunk in response:
                     chunk_message = chunk.choices[0].delta
                     if not chunk_message.content:
                         continue
                     collected_messages.append(chunk_message)
-                    print(f"#{idx}: {''.join([m.content for m in collected_messages])}")
-                print(
-                    f"Full conversation received: {''.join([m.content for m in collected_messages])}"
-                )
-                return result
+                return collected_messages
 
             return generate_stream()
 
@@ -42,5 +37,4 @@ class MoonshotAIProvider(BaseProvider):
             result = self.client.chat.completions.create(
                 model=model, messages=messages, **kwargs
             )
-            print(result)
             return create_model_response(result, model=model)

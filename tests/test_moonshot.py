@@ -17,12 +17,19 @@ class TestZhipuAIProvider(unittest.TestCase):
             base_url="https://api.moonshot.cn/v1",
         )
 
+    # def test_completion(self):
+    #     model = "moonshot-v1-8k"
+    #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
+    #     response = self.provider.completion(model=model, messages=messages)
+    #     model_response = create_model_response(response, model=model)
+    #     self.assertIsNotNone(model_response)
+
     def test_completion(self):
         model = "moonshot-v1-8k"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-        response = self.provider.completion(model=model, messages=messages)
-        model_response = create_model_response(response, model=model)
-        self.assertIsNotNone(model_response)
+        response = self.provider.completion(model=model, messages=messages, stream=True)
+        print("response: ", response)
+        self.assertIsNotNone(response)
 
 
 if __name__ == "__main__":

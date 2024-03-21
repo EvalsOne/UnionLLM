@@ -40,13 +40,10 @@ class ZhipuAIProvider(BaseProvider):
                         }
                     yield "data: " + json.dumps(line) + "\n\n"
 
-                # yield "data: [DONE]"
-
             return generate_stream()
 
         else:
             result = self.client.chat.completions.create(
                 model=model, messages=messages, **kwargs
             )
-            print(result)
             return create_model_response(result, model=model)
