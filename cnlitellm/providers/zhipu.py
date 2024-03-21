@@ -4,8 +4,8 @@ from zhipuai import ZhipuAI
 import logging, json
 
 class ZhipuAIProvider(BaseProvider):
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key
+    def __init__(self):
+        pass
 
     def completion(self, model: str, messages: list, **kwargs):
         # Check if api_key is set, if not, try to get it from kwargs
