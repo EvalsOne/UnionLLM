@@ -5,7 +5,7 @@ import unittest
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.utils import create_model_response
+from cnlitellm.utils import create_minimax_model_response
 from cnlitellm.providers.minimax import MinimaxAIProvider
 
 
@@ -20,8 +20,14 @@ class TestMinimaxProvider(unittest.TestCase):
         model = "abab6-chat"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
         response = self.provider.completion(model=model, messages=messages)
-        model_response = create_model_response(response, model=model)
-        self.assertIsNotNone(model_response)
+        self.assertIsNotNone(response)
+
+    # def test_completion(self):
+    #     model = "abab6-chat"
+    #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
+    #     response = self.provider.completion(model=model, messages=messages, stream=True)
+    #     print("response: ", response)
+    #     self.assertIsNotNone(response)
 
 
 if __name__ == "__main__":

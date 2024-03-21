@@ -1,5 +1,5 @@
 from .base_provider import BaseProvider
-from cnlitellm.utils import create_model_response
+from cnlitellm.utils import create_minimax_model_response
 import requests
 import json
 
@@ -25,8 +25,7 @@ class MinimaxAIProvider(BaseProvider):
                     "Content-Type": "application/json",
                 }
                 result = requests.post(url, headers=headers, data=payload)
-                print("result: ", result.text)
-                return result
+                return result.text
 
             return generate_stream()
 
@@ -38,4 +37,4 @@ class MinimaxAIProvider(BaseProvider):
                 "Content-Type": "application/json",
             }
             result = requests.post(url, headers=headers, data=payload)
-            return create_model_response(result.json(), model=model)
+            return create_minimax_model_response(result, model=model)

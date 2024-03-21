@@ -42,5 +42,28 @@
       "completion_tokens": 26,
       "total_tokens": 35
     }
+  },
+  {
+    "id": "024b41ee392f3e5910d9fc5dd5191904",
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "你好！由于我无法访问实时数据，我建议你查看最新的天气预报来获取今天的天气情况。你可以通过天气预报网站、应用程序或询问智能语音助手来获取这些信息。",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1711017711,
+    "model": "abab6-chat",
+    "object": "chat.completion",
+    "usage": {
+      "total_tokens": 107
+    },
+    "base_resp": {
+      "status_code": 0,
+      "status_msg": ""
+    }
   }
 ]
