@@ -5,26 +5,27 @@ import unittest
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.utils import create_model_response, ModelResponse
-from cnlitellm.providers.zhipu import ZhipuAIProvider
+from cnlitellm.utils import create_model_response
+from cnlitellm.providers.moonshot import MoonshotAIProvider
 
 
 class TestZhipuAIProvider(unittest.TestCase):
     def setUp(self):
         # 请将'your_api_key'替换为您的Zhipu AI API密钥
-        self.provider = ZhipuAIProvider(
-            api_key="e3833c6712b25eb4d89babd15c8134f5.Do904yhEYxDjewxI"
+        self.provider = MoonshotAIProvider(
+            api_key="sk-EUZowzL6zYhlBi9lbeBHnaWV2yloiooI0Hec0WpiqCC1n0Ar",
+            base_url="https://api.moonshot.cn/v1",
         )
 
     # def test_completion(self):
-    #     model = "GLM-4"
+    #     model = "moonshot-v1-8k"
     #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
     #     response = self.provider.completion(model=model, messages=messages)
     #     model_response = create_model_response(response, model=model)
     #     self.assertIsNotNone(model_response)
 
     def test_completion(self):
-        model = "GLM-4"
+        model = "moonshot-v1-8k"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
         response = self.provider.completion(model=model, messages=messages, stream=True)
         print("response: ", response)
