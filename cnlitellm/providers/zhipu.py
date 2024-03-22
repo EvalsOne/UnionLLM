@@ -8,20 +8,27 @@ class ZhipuAIProvider(BaseProvider):
     def __init__(self, api_key: str = None):
         self.api_key = api_key
 
-    def completion(self, model: str, messages: list, **kwargs):
+    def pre_processing(self, **kwargs):
         if "api_key" in kwargs:
             self.api_key = kwargs.get("api_key")
             kwargs.pop("api_key")
 
         self.client = ZhipuAI(api_key=self.api_key)
+        return kwargs
 
-        stream = kwargs.get("stream", False)
+    def post_processing(self):
+        print("postprocessing")
+
+    def completion(self, model: str, messages: list, **kwargs):
+        new_kwargs = self.pre_processing(**kwargs)
+
+        stream = new_kwargs.get("stream", False)
 
         if stream:
 
             def generate_stream():
                 for chunk in self.client.chat.completions.create(
-                    model=model, messages=messages, **kwargs
+                    model=model, messages=messages, **new_kwargs
                 ):
                     delta = chunk.choices[0].delta
                     line = {
@@ -41,6 +48,6 @@ class ZhipuAIProvider(BaseProvider):
 
         else:
             result = self.client.chat.completions.create(
-                model=model, messages=messages, **kwargs
+                model=model, messages=messages, **new_kwargs
             )
             return create_model_response(result, model=model)

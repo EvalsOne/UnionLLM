@@ -5,7 +5,6 @@ import unittest
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.utils import create_model_response, ModelResponse
 from cnlitellm.providers.zhipu import ZhipuAIProvider
 
 
