@@ -1,6 +1,7 @@
 from .base_provider import BaseProvider
 from cnlitellm.utils import create_model_response
 from openai import OpenAI
+import logging, json
 
 
 class MoonshotAIProvider(BaseProvider):
@@ -12,11 +13,10 @@ class MoonshotAIProvider(BaseProvider):
         if "api_key" in kwargs:
             self.api_key = kwargs.get("api_key")
             kwargs.pop("api_key")
-
+        self.base_url = "https://api.moonshot.cn/v1"        
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
         stream = kwargs.get("stream", False)
-
         if stream:
 
             def generate_stream():
@@ -26,10 +26,18 @@ class MoonshotAIProvider(BaseProvider):
                 collected_messages = []
                 for chunk in response:
                     chunk_message = chunk.choices[0].delta
+                    print("chunk_message: ", chunk_message)
+
+                    line = {
+                        "choices": [
+                            {"delta": {"role": chunk_message.role, "content": chunk_message.content}}
+                        ]
+                    }
                     if not chunk_message.content:
                         continue
-                    collected_messages.append(chunk_message)
-                return collected_messages
+                    # collected_messages.append(chunk_message)
+                    print("data: " + json.dumps(line) + "\n\n")
+                    yield "data: " + json.dumps(line) + "\n\n"
 
             return generate_stream()
 

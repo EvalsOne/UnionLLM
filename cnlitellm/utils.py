@@ -236,7 +236,6 @@ def convert_parameters(parameters: dict) -> dict:
     return parameters
 
 def create_model_response(openai_response: openai.ChatCompletion, model: str) -> ModelResponse:
-    # print("openai_response: ", openai_response)
     choices = []
 
     for choice in openai_response.choices:
