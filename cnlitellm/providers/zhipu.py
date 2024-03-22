@@ -1,7 +1,6 @@
 from .base_provider import BaseProvider
-from cnlitellm.utils import create_model_response, ModelResponse
+from cnlitellm.utils import create_model_response
 from zhipuai import ZhipuAI
-import logging, json
 
 
 class ZhipuAIProvider(BaseProvider):
@@ -25,6 +24,7 @@ class ZhipuAIProvider(BaseProvider):
                 for chunk in self.client.chat.completions.create(
                     model=model, messages=messages, **kwargs
                 ):
+                    print("chunk: ", chunk)
                     # Convert the chunk to the format expected by the outer function
                     delta = chunk.choices[0].delta
                     line = {
@@ -38,7 +38,7 @@ class ZhipuAIProvider(BaseProvider):
                             "completion_tokens": chunk.usage.completion_tokens,
                             "total_tokens": chunk.usage.total_tokens,
                         }
-                    yield "data: " + json.dumps(line) + "\n\n"
+                    # yield "data: " + json.dumps(line) + "\n\n"
 
             return generate_stream()
 
