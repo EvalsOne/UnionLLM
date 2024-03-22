@@ -25,7 +25,33 @@ class MinimaxAIProvider(BaseProvider):
                     "Content-Type": "application/json",
                 }
                 result = requests.post(url, headers=headers, data=payload)
-                return result.text
+                lines = [
+                    line.strip() for line in result.text.split("\n") if line.strip()
+                ]
+                parsed_data = []
+                for line in lines:
+                    line = line.replace("data: ", "")
+                    parsed_data.append(json.loads(line))
+                for index, chunk in enumerate(parsed_data):
+                    if index == len(parsed_data) - 1:
+                        chunk_message = chunk["choices"][0]["message"]
+                    else:
+                        chunk_message = chunk["choices"][0]["delta"]
+                    chunk_line = {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "role": chunk_message["role"],
+                                    "content": chunk_message["content"],
+                                }
+                            }
+                        ]
+                    }
+                    if hasattr(chunk, "usage") and chunk.choices[0].usage is not None:
+                        chunk_line["usage"] = {
+                            "total_tokens": chunk["usage"]["total_tokens"],
+                        }
+                yield chunk_line
 
             return generate_stream()
 

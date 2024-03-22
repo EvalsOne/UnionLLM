@@ -46,7 +46,7 @@ class MoonshotAIProvider(BaseProvider):
                             "completion_tokens": chunk_usage["completion_tokens"],
                             "total_tokens": chunk_usage["total_tokens"],
                         }
-                    yield json.dumps(line) + "\n\n"
+                yield json.dumps(line) + "\n\n"
 
             return generate_stream()
 

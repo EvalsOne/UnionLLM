@@ -20,6 +20,7 @@ class TestMinimaxProvider(unittest.TestCase):
         model = "abab6-chat"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
         response = self.provider.completion(model=model, messages=messages)
+        print("response: ", response)
         self.assertIsNotNone(response)
 
     # def test_completion(self):
