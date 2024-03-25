@@ -1,3 +1,4 @@
+import json
 from .base_provider import BaseProvider
 from cnlitellm.utils import create_model_response
 from openai import OpenAI
@@ -23,21 +24,29 @@ class MoonshotAIProvider(BaseProvider):
                 response = self.client.chat.completions.create(
                     model=model, messages=messages, **kwargs
                 )
-                collected_messages = []
                 for chunk in response:
                     chunk_message = chunk.choices[0].delta
-                    print("chunk_message: ", chunk_message)
-
                     line = {
                         "choices": [
-                            {"delta": {"role": chunk_message.role, "content": chunk_message.content}}
+                            {
+                                "delta": {
+                                    "role": chunk_message.role,
+                                    "content": chunk_message.content,
+                                }
+                            }
                         ]
                     }
-                    if not chunk_message.content:
-                        continue
-                    # collected_messages.append(chunk_message)
-                    print("data: " + json.dumps(line) + "\n\n")
-                    yield "data: " + json.dumps(line) + "\n\n"
+                    if (
+                        hasattr(chunk.choices[0], "usage")
+                        and chunk.choices[0].usage is not None
+                    ):
+                        chunk_usage = chunk.choices[0].usage
+                        line["usage"] = {
+                            "prompt_tokens": chunk_usage["prompt_tokens"],
+                            "completion_tokens": chunk_usage["completion_tokens"],
+                            "total_tokens": chunk_usage["total_tokens"],
+                        }
+                    yield json.dumps(line) + "\n\n"
 
             return generate_stream()
 

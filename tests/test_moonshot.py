@@ -5,7 +5,6 @@ import unittest
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.utils import create_model_response
 from cnlitellm.providers.moonshot import MoonshotAIProvider
 
 
@@ -17,19 +16,19 @@ class TestZhipuAIProvider(unittest.TestCase):
             base_url="https://api.moonshot.cn/v1",
         )
 
-    # def test_completion(self):
-    #     model = "moonshot-v1-8k"
-    #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-    #     response = self.provider.completion(model=model, messages=messages)
-    #     model_response = create_model_response(response, model=model)
-    #     self.assertIsNotNone(model_response)
-
     def test_completion(self):
         model = "moonshot-v1-8k"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-        response = self.provider.completion(model=model, messages=messages, stream=True)
+        response = self.provider.completion(model=model, messages=messages)
         print("response: ", response)
         self.assertIsNotNone(response)
+
+    # def test_completion(self):
+    #     model = "moonshot-v1-8k"
+    #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
+    #     response = self.provider.completion(model=model, messages=messages, stream=True)
+    #     print("response: ", response)
+    #     self.assertIsNotNone(response)
 
 
 if __name__ == "__main__":
