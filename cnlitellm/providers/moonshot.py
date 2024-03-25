@@ -60,7 +60,7 @@ class MoonshotAIProvider(BaseProvider):
                     "completion_tokens": chunk_usage["completion_tokens"],
                     "total_tokens": chunk_usage["total_tokens"],
                 }
-        yield json.dumps(line) + "\n\n"
+            yield json.dumps(line) + "\n\n"
 
     def completion(self, model: str, messages: list, **kwargs):
         try:

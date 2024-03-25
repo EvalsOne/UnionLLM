@@ -40,13 +40,15 @@ class BaiChuanAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         result = requests.post(url, headers=headers, data=payload)
-        lines = [line.strip() for line in result.text.split("\n") if line.strip()]
-        parsed_data = []
-        for line in lines:
-            new_line = line.replace("data: ", "")
-            parsed_data.append(json.loads(new_line))
-        for chunk in enumerate(parsed_data):
-            chunk_message = chunk["choices"][0]["delta"]
+        for line in result.text.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line == "data: [DONE]":
+                break
+
+            new_chunk = json.loads(line.replace("data: ", ""))
+            chunk_message = new_chunk["choices"][0]["delta"]
             chunk_line = {
                 "choices": [
                     {
@@ -57,13 +59,14 @@ class BaiChuanAIProvider(BaseProvider):
                     }
                 ]
             }
-            if hasattr(chunk, "usage") and chunk["choices"][0]["usage"] is not None:
+            if "usage" in new_chunk:
+                usage_info = new_chunk["usage"]
                 chunk_line["usage"] = {
-                    "total_tokens": chunk["usage"]["total_tokens"],
-                    "prompt_tokens": chunk["usage"]["prompt_tokens"],
-                    "completion_tokens": chunk["usage"]["completion_tokens"],
+                    "total_tokens": usage_info["total_tokens"],
+                    "prompt_tokens": usage_info["prompt_tokens"],
+                    "completion_tokens": usage_info["completion_tokens"],
                 }
-        yield chunk_line
+            yield chunk_line
 
     def completion(self, model: str, messages: list, **kwargs):
         try:

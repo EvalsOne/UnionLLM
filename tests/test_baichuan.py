@@ -29,7 +29,26 @@ class TestBaiChuanProvider(unittest.TestCase):
         model = "Baichuan2-Turbo"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
         response = self.provider.completion(model=model, messages=messages, stream=True)
-        print("response: ", response)
+        for chunk in response:
+            delta = chunk["choices"][0]["delta"]
+            line = {
+                "choices": [
+                    {
+                        "delta": {
+                            "role": delta["role"],
+                            "content": delta["content"],
+                        }
+                    }
+                ]
+            }
+            if "usage" in chunk:
+                usage_info = chunk["usage"]
+                line["usage"] = {
+                    "total_tokens": usage_info["total_tokens"],
+                    "prompt_tokens": usage_info["prompt_tokens"],
+                    "completion_tokens": usage_info["completion_tokens"],
+                }
+            print("line: ", line)
         self.assertIsNotNone(response)
 
 

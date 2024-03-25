@@ -1,3 +1,4 @@
+import json
 import sys
 import os
 import unittest
@@ -27,7 +28,27 @@ class TestZhipuAIProvider(unittest.TestCase):
     #     model = "moonshot-v1-8k"
     #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
     #     response = self.provider.completion(model=model, messages=messages, stream=True)
-    #     print("response: ", response)
+    #     for chunk in response:
+    #         new_chunk = json.loads(chunk)
+    #         delta = new_chunk["choices"][0]["delta"]
+    #         line = {
+    #             "choices": [
+    #                 {
+    #                     "delta": {
+    #                         "role": delta["role"],
+    #                         "content": delta["content"],
+    #                     }
+    #                 }
+    #             ]
+    #         }
+    #         if "usage" in new_chunk:
+    #             usage_info = new_chunk["usage"]
+    #             line["usage"] = {
+    #                 "prompt_tokens": usage_info["prompt_tokens"],
+    #                 "completion_tokens": usage_info["completion_tokens"],
+    #                 "total_tokens": usage_info["total_tokens"],
+    #             }
+    #         print("line: ", line)
     #     self.assertIsNotNone(response)
 
 

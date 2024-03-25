@@ -60,11 +60,11 @@ class MinimaxAIProvider(BaseProvider):
                     }
                 ]
             }
-            if hasattr(chunk, "usage") and chunk["choices"][0]["usage"] is not None:
+            if "usage" in chunk:
                 chunk_line["usage"] = {
                     "total_tokens": chunk["usage"]["total_tokens"],
                 }
-        yield chunk_line
+            yield chunk_line
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
