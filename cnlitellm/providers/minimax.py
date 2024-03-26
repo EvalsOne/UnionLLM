@@ -40,31 +40,32 @@ class MinimaxAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         result = requests.post(url, headers=headers, data=payload)
-        lines = [line.strip() for line in result.text.split("\n") if line.strip()]
-        parsed_data = []
-        for line in lines:
-            line = line.replace("data: ", "")
-            parsed_data.append(json.loads(line))
-        for index, chunk in enumerate(parsed_data):
-            if index == len(parsed_data) - 1:
-                chunk_message = chunk["choices"][0]["message"]
-            else:
-                chunk_message = chunk["choices"][0]["delta"]
-            chunk_line = {
-                "choices": [
-                    {
-                        "delta": {
-                            "role": chunk_message["role"],
-                            "content": chunk_message["content"],
-                        }
+        for line in result.iter_lines():
+            if line:
+                new_line = line.decode("utf-8").replace("data: ", "")
+                data = json.loads(new_line)
+                choices = data.get("choices", [])
+                if choices:
+                    choice = choices[0]
+                    delta = choice.get("delta")
+                    if not delta:
+                        continue
+                    chunk_message = delta
+                    chunk_line = {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "role": chunk_message["role"],
+                                    "content": chunk_message["content"],
+                                }
+                            }
+                        ]
                     }
-                ]
-            }
-            if "usage" in chunk:
-                chunk_line["usage"] = {
-                    "total_tokens": chunk["usage"]["total_tokens"],
-                }
-            yield chunk_line
+                    if "usage" in data:
+                        chunk_line["usage"] = {
+                            "total_tokens": data["usage"]["total_tokens"],
+                        }
+                    yield chunk_line
 
     def completion(self, model: str, messages: list, **kwargs):
         try:

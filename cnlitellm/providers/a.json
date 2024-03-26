@@ -1,69 +1,12 @@
-[
-  {
-    "model": "GLM-4",
-    "created": 1711009688,
-    "choices": [
-      {
-        "index": 0,
-        "finish_reason": "stop",
-        "message": {
-          "content": "你好！很抱歉，作为一个AI，我无法提供实时的天气信息。你可以通过查看当地的天气预报来获取最新的天气情况。如果有其他问题或需要帮助，请随时告诉我！",
-          "role": "assistant",
-          "tool_calls": null
-        }
-      }
-    ],
-    "request_id": "8494924280512801895",
-    "id": "8494924280512801895",
-    "usage": {
-      "prompt_tokens": 11,
-      "completion_tokens": 40,
-      "total_tokens": 51
-    }
-  },
-  {
-    "id": "chatcmpl-4f5779bbcd184b3fb71429538cc960c8",
-    "choices": [
-      {
-        "finish_reason": "stop",
-        "index": 0,
-        "message": {
-          "content": "很抱歉，我无法实时提供天气信息。建议您查看可靠的天气网站或使用手机应用程序来获取当地的天气信息。",
-          "role": "assistant"
-        }
-      }
-    ],
-    "created": 5707630,
-    "model": "moonshot-v1-8k",
-    "object": "chat.completion",
-    "system_fingerprint": null,
-    "usage": {
-      "prompt_tokens": 9,
-      "completion_tokens": 26,
-      "total_tokens": 35
-    }
-  },
-  {
-    "id": "024b41ee392f3e5910d9fc5dd5191904",
-    "choices": [
-      {
-        "finish_reason": "stop",
-        "index": 0,
-        "message": {
-          "content": "你好！由于我无法访问实时数据，我建议你查看最新的天气预报来获取今天的天气情况。你可以通过天气预报网站、应用程序或询问智能语音助手来获取这些信息。",
-          "role": "assistant"
-        }
-      }
-    ],
-    "created": 1711017711,
-    "model": "abab6-chat",
-    "object": "chat.completion",
-    "usage": {
-      "total_tokens": 107
-    },
-    "base_resp": {
-      "status_code": 0,
-      "status_msg": ""
-    }
+{
+  "code": 200,
+  "code_msg": "Success",
+  "trace_id": "67b3237c289a800e",
+  "resp_data": {
+    "status": 3,
+    "reply": "。",
+    "finish_reason": 1,
+    "all_response": 0,
+    "usage": { "prompt_tokens": 9, "completion_tokens": 37, "total_tokens": 46 }
   }
-]
+}

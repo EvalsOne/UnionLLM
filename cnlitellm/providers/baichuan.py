@@ -40,33 +40,31 @@ class BaiChuanAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         result = requests.post(url, headers=headers, data=payload)
-        for line in result.text.split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            if line == "data: [DONE]":
-                break
-
-            new_chunk = json.loads(line.replace("data: ", ""))
-            chunk_message = new_chunk["choices"][0]["delta"]
-            chunk_line = {
-                "choices": [
-                    {
-                        "delta": {
-                            "role": chunk_message["role"],
-                            "content": chunk_message["content"],
+        for line in result.iter_lines():
+            if line:
+                new_line = line.decode("utf-8").replace("data: ", "")
+                if new_line == "[DONE]":
+                    break
+                data = json.loads(new_line)
+                chunk_message = data["choices"][0]["delta"]
+                chunk_line = {
+                    "choices": [
+                        {
+                            "delta": {
+                                "role": chunk_message["role"],
+                                "content": chunk_message["content"],
+                            }
                         }
-                    }
-                ]
-            }
-            if "usage" in new_chunk:
-                usage_info = new_chunk["usage"]
-                chunk_line["usage"] = {
-                    "total_tokens": usage_info["total_tokens"],
-                    "prompt_tokens": usage_info["prompt_tokens"],
-                    "completion_tokens": usage_info["completion_tokens"],
+                    ]
                 }
-            yield chunk_line
+                if "usage" in data:
+                    usage_info = data["usage"]
+                    chunk_line["usage"] = {
+                        "total_tokens": usage_info["total_tokens"],
+                        "prompt_tokens": usage_info["prompt_tokens"],
+                        "completion_tokens": usage_info["completion_tokens"],
+                    }
+                yield chunk_line
 
     def completion(self, model: str, messages: list, **kwargs):
         try:

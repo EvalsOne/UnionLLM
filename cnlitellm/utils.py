@@ -387,3 +387,57 @@ def create_baichuan_model_response(result: dict, model: str) -> ModelResponse:
         usage=usage,
     )
     return response
+
+
+def create_qwen_model_response(result: dict, model: str) -> ModelResponse:
+    choices = []
+
+    for index, choice in enumerate(result.output.choices):
+        message = Message(content=choice.message.content, role=choice.message.role)
+        choices.append(
+            Choices(message=message, index=index, finish_reason=choice.finish_reason)
+        )
+
+    usage = Usage(
+        prompt_tokens=result.usage.input_tokens,
+        completion_tokens=result.usage.output_tokens,
+        total_tokens=result.usage.total_tokens,
+    )
+
+    response = ModelResponse(
+        id=result.request_id,
+        choices=choices,
+        created=int(time.time()),
+        model=model,
+        usage=usage,
+    )
+    return response
+
+
+def create_tiangong_model_response(result: dict, model: str) -> ModelResponse:
+    response_dict = result.json()
+    choices = []
+
+    message = Message(content=response_dict["resp_data"]["reply"], role="assistant")
+    choices.append(
+        Choices(
+            message=message,
+            index=0,
+            finish_reason=response_dict["resp_data"]["finish_reason"],
+        )
+    )
+
+    usage = Usage(
+        prompt_tokens=response_dict["resp_data"]["usage"]["prompt_tokens"],
+        completion_tokens=response_dict["resp_data"]["usage"]["completion_tokens"],
+        total_tokens=response_dict["resp_data"]["usage"]["total_tokens"],
+    )
+
+    response = ModelResponse(
+        id=response_dict["trace_id"],
+        choices=choices,
+        created=int(time.time()),
+        model=model,
+        usage=usage,
+    )
+    return response
