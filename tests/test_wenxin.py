@@ -6,26 +6,26 @@ import unittest
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.providers.tiangong import TianGongAIProvider
+from cnlitellm.providers.wenxin import WenXinAIProvider
 
 
-class TestTianGongProvider(unittest.TestCase):
+class TestWenXinProvider(unittest.TestCase):
     def setUp(self):
         # 请将'your_api_key'替换为您的Zhipu AI API密钥
-        self.provider = TianGongAIProvider(
-            api_key="a253c3d3bb00495a6f1f6572367e20b7",
-            app_secret="df6b91ff0e400b8114122de882ff16597ab3539eb71afee5",
+        self.provider = WenXinAIProvider(
+            api_key="AvA4gBP5LZqKEruKGYzfYzU9",
+            secret_key="8Mg2XN3zPmskxzeYY3i7P7u24poGIHmO",
         )
 
     def test_completion(self):
-        model = "SkyChat-MegaVerse"
+        model = "completions_pro"
         messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
         response = self.provider.completion(model=model, messages=messages)
         print("response: ", response)
         self.assertIsNotNone(response)
 
     # def test_completion(self):
-    #     model = "SkyChat-MegaVerse"
+    #     model = "completions_pro"
     #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
     #     response = self.provider.completion(model=model, messages=messages, stream=True)
     #     for chunk in response:

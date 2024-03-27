@@ -1,3 +1,4 @@
+import json
 from openai import OpenAIError as OriginalError
 from typing import cast, List, Dict, Union, Optional, Literal
 
@@ -437,6 +438,35 @@ def create_tiangong_model_response(result: dict, model: str) -> ModelResponse:
         id=response_dict["trace_id"],
         choices=choices,
         created=int(time.time()),
+        model=model,
+        usage=usage,
+    )
+    return response
+
+
+def create_wenxin_model_response(result: dict, model: str) -> ModelResponse:
+    response_dict = json.loads(result)
+    choices = []
+
+    message = Message(content=response_dict["result"], role="assistant")
+    choices.append(
+        Choices(
+            message=message,
+            index=0,
+            finish_reason=response_dict["finish_reason"],
+        )
+    )
+
+    usage = Usage(
+        prompt_tokens=response_dict["usage"]["prompt_tokens"],
+        completion_tokens=response_dict["usage"]["completion_tokens"],
+        total_tokens=response_dict["usage"]["total_tokens"],
+    )
+
+    response = ModelResponse(
+        id=response_dict["id"],
+        choices=choices,
+        created=response_dict["created"],
         model=model,
         usage=usage,
     )
