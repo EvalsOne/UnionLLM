@@ -16,19 +16,41 @@ class TestZhipuAIProvider(unittest.TestCase):
             base_url="https://api.moonshot.cn/v1",
         )
 
-    def test_completion(self):
-        model = "moonshot-v1-8k"
-        messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-        response = self.provider.completion(model=model, messages=messages)
-        print("response: ", response)
-        self.assertIsNotNone(response)
-
     # def test_completion(self):
     #     model = "moonshot-v1-8k"
     #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-    #     response = self.provider.completion(model=model, messages=messages, stream=True)
+    #     response = self.provider.completion(model=model, messages=messages)
     #     print("response: ", response)
     #     self.assertIsNotNone(response)
+
+    def test_completion(self):
+        model = "moonshot-v1-8k"
+        messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
+        response = self.provider.completion(model=model, messages=messages, stream=True)
+        for chunk in response:
+            print("chunk: ", chunk)
+            chunk_message = chunk.choices[0].delta
+            line = {
+                "choices": [
+                    {
+                        "delta": {
+                            "role": chunk_message.role,
+                            "content": chunk_message.content,
+                        }
+                    }
+                ]
+            }
+            if (
+                hasattr(chunk.choices[0], "usage")
+                and chunk.choices[0].usage is not None
+            ):
+                line["usage"] = {
+                    "prompt_tokens": chunk.choices[0].usage.prompt_tokens,
+                    "completion_tokens": chunk.choices[0].usage.completion_tokens,
+                    "total_tokens": chunk.choices[0].usage.total_tokens,
+                }
+        print("response: ", response)
+        self.assertIsNotNone(response)
 
 
 if __name__ == "__main__":

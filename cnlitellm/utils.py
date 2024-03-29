@@ -355,3 +355,35 @@ def create_minimax_model_response(result: dict, model: str) -> ModelResponse:
         usage=usage,
     )
     return response
+
+
+def create_baichuan_model_response(result: dict, model: str) -> ModelResponse:
+    response_dict = result.json()
+    choices = []
+
+    for choice in response_dict["choices"]:
+        message = Message(
+            content=choice["message"]["content"], role=choice["message"]["role"]
+        )
+        choices.append(
+            Choices(
+                message=message,
+                index=choice["index"],
+                finish_reason=choice["finish_reason"],
+            )
+        )
+
+    usage = Usage(
+        prompt_tokens=response_dict["usage"]["prompt_tokens"],
+        completion_tokens=response_dict["usage"]["completion_tokens"],
+        total_tokens=response_dict["usage"]["total_tokens"],
+    )
+
+    response = ModelResponse(
+        id=response_dict["id"],
+        choices=choices,
+        created=response_dict["created"],
+        model=model,
+        usage=usage,
+    )
+    return response

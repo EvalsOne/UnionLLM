@@ -16,18 +16,19 @@ class TestMinimaxProvider(unittest.TestCase):
             api_key="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJHcm91cE5hbWUiOiJ0aWFtbyIsIlVzZXJOYW1lIjoidGlhbW8iLCJBY2NvdW50IjoiIiwiU3ViamVjdElEIjoiMTc2ODUzNjQzNzMxNTA4MDQxMCIsIlBob25lIjoiMTk1MTAzNjA5MzQiLCJHcm91cElEIjoiMTc2ODUzNjQzNzMwNjY5MTgwMiIsIlBhZ2VOYW1lIjoiIiwiTWFpbCI6IiIsIkNyZWF0ZVRpbWUiOiIyMDI0LTAzLTIxIDE1OjAyOjI0IiwiaXNzIjoibWluaW1heCJ9.LVXY3zEwzpNQ7yei--ZP7JtG7Xs_vfeADmGd_JcooTOlzUJ3PmDQFssDkY-8DKj_Pm9dthI4Dd3bI2ELdyYbmcA_VU-qNWBfqtB0Gtfb_azdzAdTbkftUxgSm6t44gHZCgymKfblIHk-hdAISJ5YeE1ETdFww9gGREnY8T54Zhe8OsCdy7pjFXktlAEFWWPNBfumcUORSHtiIX3SAJRHTafgMWuv0tAxvIO1Vzz0OoWIBdpYoslHJx1aIOCwuaohsuXmfUVdmiWZyQJKvxl5L6ix9IsNQW9e1m9gJ_1M3UnJh9i6I2UC3gkNLwm9zYFqG2v20nWLtchu9vBShEpFQA",
         )
 
-    def test_completion(self):
-        model = "abab6-chat"
-        messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-        response = self.provider.completion(model=model, messages=messages)
-        self.assertIsNotNone(response)
-
     # def test_completion(self):
     #     model = "abab6-chat"
     #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-    #     response = self.provider.completion(model=model, messages=messages, stream=True)
+    #     response = self.provider.completion(model=model, messages=messages)
     #     print("response: ", response)
     #     self.assertIsNotNone(response)
+
+    def test_completion(self):
+        model = "abab6-chat"
+        messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
+        response = self.provider.completion(model=model, messages=messages, stream=True)
+        print("response: ", response)
+        self.assertIsNotNone(response)
 
 
 if __name__ == "__main__":
