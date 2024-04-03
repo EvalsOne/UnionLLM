@@ -44,7 +44,6 @@ class MoonshotAIProvider(BaseProvider):
         print("start stream processing... step ")
 
         for chunk in response:
-            # print("chunk: ", chunk)
             chunk_message = chunk.choices[0].delta
             line = {
                 "choices": [
@@ -66,7 +65,6 @@ class MoonshotAIProvider(BaseProvider):
                     "completion_tokens": chunk_usage["completion_tokens"],
                     "total_tokens": chunk_usage["total_tokens"],
                 }
-            # print("line: ", line)
             yield json.dumps(line) + "\n\n"
 
     def completion(self, model: str, messages: list, **kwargs):

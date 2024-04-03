@@ -55,7 +55,6 @@ class ZhipuAIProvider(BaseProvider):
                     "completion_tokens": chunk.usage.completion_tokens,
                     "total_tokens": chunk.usage.total_tokens,
                 }
-            print("line内容: ", line)
             yield json.dumps(line) + "\n\n"
 
     def completion(self, model: str, messages: list, **kwargs):
