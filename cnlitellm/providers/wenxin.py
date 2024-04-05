@@ -51,7 +51,6 @@ class WenXinAIProvider(BaseProvider):
             kwargs.pop("top_p")
 
         return kwargs
-
     def post_stream_processing(self, model, messages, **new_kwargs):
         payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
         headers = {"Content-Type": "application/json"}
