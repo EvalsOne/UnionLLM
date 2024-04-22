@@ -1,8 +1,8 @@
-from .base_provider import BaseProvider
-from cnlitellm.utils import create_baichuan_model_response
-import requests
 import json
-
+from .base_provider import BaseProvider
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage
+import requests
+import logging
 
 class BaiChuanOpenAIError(Exception):
     def __init__(
@@ -14,33 +14,30 @@ class BaiChuanOpenAIError(Exception):
         self.message = message
         super().__init__(self.message)
 
-
 class BaiChuanAIProvider(BaseProvider):
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key
+    def __init__(self, **model_kwargs):
+        self.api_key = model_kwargs.get("api_key")
+        self.endpoint_url = "https://api.baichuan-ai.com/v1/chat/completions"
 
     def pre_processing(self, **kwargs):
-        if "api_key" in kwargs:
-            self.api_key = kwargs.get("api_key")
-            kwargs.pop("api_key")
-
-        if "temperature" in kwargs:
-            temperature = kwargs.get("temperature")
-            if temperature > 1 or temperature < 0:
-                raise BaiChuanOpenAIError(
-                    status_code=422, message="Temperature must be between 0 and 1"
-                )
+        supported_params = [
+            "model", "messages", "max_tokens", "temperature", "top_p", "n",
+            "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
+            "best_of", "logit_bias"
+        ]
+        for key in list(kwargs.keys()):
+            if key not in supported_params:
+                kwargs.pop(key)
         return kwargs
 
-    def post_stream_processing(self, model, messages, **new_kwargs):
-        url = "https://api.baichuan-ai.com/v1/chat/completions"
+    def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        result = requests.post(url, headers=headers, data=payload)
-        for line in result.iter_lines():
+        response = requests.post(self.endpoint_url, headers=headers, data=payload)
+        for line in response.iter_lines():
             if line:
                 new_line = line.decode("utf-8").replace("data: ", "")
                 if new_line == "[DONE]":
@@ -64,7 +61,36 @@ class BaiChuanAIProvider(BaseProvider):
                         "prompt_tokens": usage_info["prompt_tokens"],
                         "completion_tokens": usage_info["completion_tokens"],
                     }
-                yield chunk_line
+                yield json.dumps(chunk_line) + "\n\n"
+
+    def create_model_response_wrapper(self, result, model):
+        response_dict = result.json()
+        choices = []
+        for choice in response_dict["choices"]:
+            message = Message(
+                content=choice["message"]["content"], role=choice["message"]["role"]
+            )
+            choices.append(
+                Choices(
+                    message=message,
+                    index=choice["index"],
+                    finish_reason=choice["finish_reason"],
+                )
+            )
+        usage = Usage(
+            prompt_tokens=response_dict["usage"]["prompt_tokens"],
+            completion_tokens=response_dict["usage"]["completion_tokens"],
+            total_tokens=response_dict["usage"]["total_tokens"],
+        )
+        response = ModelResponse(
+            id=response_dict["id"],
+            choices=choices,
+            created=response_dict["created"],
+            model=model,
+            usage=usage,
+        )
+        return response
+
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
@@ -76,22 +102,15 @@ class BaiChuanAIProvider(BaseProvider):
             stream = kwargs.get("stream", False)
 
             if stream:
-                return self.post_stream_processing(model, messages, **new_kwargs)
+                return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
             else:
-                url = "https://api.baichuan-ai.com/v1/chat/completions"
-                payload = json.dumps({"model": model, "messages": messages, **kwargs})
+                payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 }
-                result = requests.post(url, headers=headers, data=payload)
-                if result.status_code == 200:
-                    return create_baichuan_model_response(result, model=model)
-                else:
-                    raise BaiChuanOpenAIError(
-                        status_code=result.status_code,
-                        message=f"Failed to complete request: {result.text}",
-                    )
+                result = requests.post(self.endpoint_url, headers=headers, data=payload)
+                return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):
                 raise BaiChuanOpenAIError(status_code=e.status_code, message=str(e))

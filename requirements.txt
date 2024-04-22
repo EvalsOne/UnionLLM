@@ -1,0 +1,8 @@
+dashscope==1.14.1
+openai==1.16.2
+pydantic==2.6.4
+Requests==2.31.0
+setuptools==69.1.0
+tenacity==8.2.3
+websocket_client==1.7.0
+zhipuai==2.0.1

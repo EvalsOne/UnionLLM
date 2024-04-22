@@ -1,8 +1,9 @@
 import json
+from abc import ABC, abstractmethod
 from openai import OpenAIError as OriginalError
-from typing import cast, List, Dict, Union, Optional, Literal
+from typing import List, Union, Optional
 
-import uuid, time, openai
+import uuid, time, openai, random
 from openai._models import BaseModel as OpenAIObject
 
 # from .exceptions import (
@@ -17,7 +18,6 @@ from openai._models import BaseModel as OpenAIObject
 #     APIError,
 #     BudgetExceededError
 # )
-
 
 class Message(OpenAIObject):
     def __init__(
@@ -131,6 +131,31 @@ class Usage(OpenAIObject):
         # Allow dictionary-style assignment of attributes
         setattr(self, key, value)
 
+class Context(OpenAIObject):
+    def __init__(self, id=None, content=None, score=None, **params):
+        super(Context, self).__init__(**params)
+        if id:
+            self.id = id
+        if content:
+            self.content = content
+        if score:
+            self.score = score
+
+    def __contains__(self, key):
+        # Define custom behavior for the 'in' operator
+        return hasattr(self, key)
+
+    def get(self, key, default=None):
+        # Custom .get() method to access attributes with a default value if the attribute doesn't exist
+        return getattr(self, key, default)
+
+    def __getitem__(self, key):
+        # Allow dictionary-style access to attributes
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        # Allow dictionary-style assignment of attributes
+        setattr(self, key, value)
 
 class StreamingChoices(OpenAIObject):
     def __init__(
@@ -257,6 +282,59 @@ class ModelResponse(OpenAIObject):
         # Allow dictionary-style assignment of attributes
         setattr(self, key, value)
 
+class ResponseModelInterface:
+    def post_stream_processing(self, response):
+        for chunk in response:
+            chunk_message = chunk.choices[0].delta
+            line = {
+                "choices": [
+                    {
+                        "delta": {
+                            "role": chunk_message.role,
+                            "content": chunk_message.content,
+                        }
+                    }
+                ]
+            }
+            if (
+                hasattr(chunk.choices[0], "usage")
+                and chunk.choices[0].usage is not None
+            ):
+                chunk_usage = chunk.choices[0].usage
+                line["usage"] = {
+                    "prompt_tokens": chunk_usage["prompt_tokens"],
+                    "completion_tokens": chunk_usage["completion_tokens"],
+                    "total_tokens": chunk_usage["total_tokens"],
+                }
+            yield json.dumps(line) + "\n\n"
+
+    def create_model_response(
+        self, openai_response: openai.ChatCompletion, model: str
+    ) -> ModelResponse:
+        # print("openai_response: ", openai_response)
+        choices = []
+
+        for choice in openai_response.choices:
+            message = Message(content=choice.message.content, role=choice.message.role)
+            choices.append(
+                Choices(
+                    message=message, index=choice.index, finish_reason=choice.finish_reason
+                )
+            )
+
+        usage = Usage(
+            prompt_tokens=openai_response.usage.prompt_tokens,
+            completion_tokens=openai_response.usage.completion_tokens,
+            total_tokens=openai_response.usage.total_tokens,
+        )
+        response = ModelResponse(
+            id=openai_response.id,
+            choices=choices,
+            created=openai_response.created,
+            model=model,
+            usage=usage,
+        )
+        return response
 
 class EmbeddingResponse(OpenAIObject):
     def __init__(
@@ -282,195 +360,14 @@ class EmbeddingResponse(OpenAIObject):
         d = super().to_dict_recursive()
         return d
 
-
-def preprocess_prompt(prompt: str) -> str:
-    # 这里实现通用的提示语预处理逻辑
-    return prompt
-
-
-def convert_parameters(parameters: dict) -> dict:
-    # 这里实现通用的参数转换逻辑
-    return parameters
-
-
-def create_model_response(
-    openai_response: openai.ChatCompletion, model: str
-) -> ModelResponse:
-    # print("openai_response: ", openai_response)
-    choices = []
-
-    for choice in openai_response.choices:
-        # print("choice.message.content: ", choice.message.content)
-        message = Message(content=choice.message.content, role=choice.message.role)
-        # print("message: ", message)
-        choices.append(
-            Choices(
-                message=message, index=choice.index, finish_reason=choice.finish_reason
-            )
-        )
-
-    usage = Usage(
-        prompt_tokens=openai_response.usage.prompt_tokens,
-        completion_tokens=openai_response.usage.completion_tokens,
-        total_tokens=openai_response.usage.total_tokens,
-    )
-
-    # print("choices: ", choices)
-
-    response = ModelResponse(
-        id=openai_response.id,
-        choices=choices,
-        created=openai_response.created,
-        model=model,
-        usage=usage,
-    )
-    # print("response: ", response)
-    return response
-
-
-def create_minimax_model_response(result: dict, model: str) -> ModelResponse:
-    response_dict = result.json()
-    choices = []
-
-    for choice in response_dict["choices"]:
-        message = Message(
-            content=choice["message"]["content"], role=choice["message"]["role"]
-        )
-        choices.append(
-            Choices(
-                message=message,
-                index=choice["index"],
-                finish_reason=choice["finish_reason"],
-            )
-        )
-
-    usage = Usage(
-        total_tokens=response_dict["usage"]["total_tokens"],
-    )
-
-    print("usage 内容: ", usage)
-
-    response = ModelResponse(
-        id=response_dict["id"],
-        choices=choices,
-        created=response_dict["created"],
-        model=model,
-        usage=usage,
-    )
-    return response
-
-
-def create_baichuan_model_response(result: dict, model: str) -> ModelResponse:
-    response_dict = result.json()
-    choices = []
-
-    for choice in response_dict["choices"]:
-        message = Message(
-            content=choice["message"]["content"], role=choice["message"]["role"]
-        )
-        choices.append(
-            Choices(
-                message=message,
-                index=choice["index"],
-                finish_reason=choice["finish_reason"],
-            )
-        )
-
-    usage = Usage(
-        prompt_tokens=response_dict["usage"]["prompt_tokens"],
-        completion_tokens=response_dict["usage"]["completion_tokens"],
-        total_tokens=response_dict["usage"]["total_tokens"],
-    )
-
-    response = ModelResponse(
-        id=response_dict["id"],
-        choices=choices,
-        created=response_dict["created"],
-        model=model,
-        usage=usage,
-    )
-    return response
-
-
-def create_qwen_model_response(result: dict, model: str) -> ModelResponse:
-    choices = []
-
-    for index, choice in enumerate(result.output.choices):
-        message = Message(content=choice.message.content, role=choice.message.role)
-        choices.append(
-            Choices(message=message, index=index, finish_reason=choice.finish_reason)
-        )
-
-    usage = Usage(
-        prompt_tokens=result.usage.input_tokens,
-        completion_tokens=result.usage.output_tokens,
-        total_tokens=result.usage.total_tokens,
-    )
-
-    response = ModelResponse(
-        id=result.request_id,
-        choices=choices,
-        created=int(time.time()),
-        model=model,
-        usage=usage,
-    )
-    return response
-
-
-def create_tiangong_model_response(result: dict, model: str) -> ModelResponse:
-    response_dict = result.json()
-    print(response_dict)
-    choices = []
-
-    message = Message(content=response_dict["resp_data"]["reply"], role="assistant")
-    choices.append(
-        Choices(
-            message=message,
-            index=0,
-            finish_reason=response_dict["resp_data"]["finish_reason"],
-        )
-    )
-
-    usage = Usage(
-        prompt_tokens=response_dict["resp_data"]["usage"]["prompt_tokens"],
-        completion_tokens=response_dict["resp_data"]["usage"]["completion_tokens"],
-        total_tokens=response_dict["resp_data"]["usage"]["total_tokens"],
-    )
-
-    response = ModelResponse(
-        id=response_dict["trace_id"],
-        choices=choices,
-        created=int(time.time()),
-        model=model,
-        usage=usage,
-    )
-    return response
-
-
-def create_wenxin_model_response(result: dict, model: str) -> ModelResponse:
-    response_dict = json.loads(result)
-    choices = []
-
-    message = Message(content=response_dict["result"], role="assistant")
-    choices.append(
-        Choices(
-            message=message,
-            index=0,
-            finish_reason=response_dict["finish_reason"],
-        )
-    )
-
-    usage = Usage(
-        prompt_tokens=response_dict["usage"]["prompt_tokens"],
-        completion_tokens=response_dict["usage"]["completion_tokens"],
-        total_tokens=response_dict["usage"]["total_tokens"],
-    )
-
-    response = ModelResponse(
-        id=response_dict["id"],
-        choices=choices,
-        created=response_dict["created"],
-        model=model,
-        usage=usage,
-    )
-    return response
+def generate_unique_uid():
+    # Get the current time in microseconds
+    microseconds = int(time.time() * 1000000)
+    
+    # Get a random number between 0 and 0xFFFF
+    rand_num = random.randint(0, 0xFFFF)
+    
+    # Combine them to get a unique ID
+    unique_uid = f"{microseconds:x}{rand_num:04x}"
+    
+    return unique_uid

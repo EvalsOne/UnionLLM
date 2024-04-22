@@ -1,6 +1,6 @@
 import json
 from .base_provider import BaseProvider
-from cnlitellm.utils import create_model_response
+from cnlitellm.utils import ResponseModelInterface
 from openai import OpenAI
 import logging, json
 
@@ -17,55 +17,34 @@ class MoonshotOpenAIError(Exception):
 
 
 class MoonshotAIProvider(BaseProvider):
-    def __init__(self, api_key: str = None, base_url: str = None):
-        self.api_key = api_key
-        # self.base_url = base_url
-        self.base_url = "https://api.moonshot.cn/v1"        
+    def __init__(self, **model_kwargs):
+        self.api_key = model_kwargs.get("api_key")
+        self.base_url = "https://api.moonshot.cn/v1"
+        self.response_model = ResponseModelInterface()
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def pre_processing(self, **kwargs):
-        if "api_key" in kwargs:
-            self.api_key = kwargs.get("api_key")
-            kwargs.pop("api_key")
+        # 处理参数兼容性问题，不支持的参数全部舍弃
+        supported_params = [
+            "model", "messages", "max_tokens", "temperature", "top_p", "n",
+            "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
+            "best_of", "logit_bias"
+        ]
+        for key in list(kwargs.keys()):
+            if key not in supported_params:
+                kwargs.pop(key)
 
-        if "temperature" in kwargs:
-            temperature = kwargs.get("temperature")
-            if temperature > 1 or temperature < 0:
-                raise MoonshotOpenAIError(
-                    status_code=422, message="Temperature must be between 0 and 1"
-                )
-        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
         return kwargs
-
-    def post_stream_processing(self, model, messages, **new_kwargs):
-        print("start stream processing... step 1")
-        response = self.client.chat.completions.create(
+    
+    def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
+        result = self.client.chat.completions.create(
             model=model, messages=messages, **new_kwargs
         )
-        print("start stream processing... step ")
+        return self.response_model.post_stream_processing(result)
 
-        for chunk in response:
-            chunk_message = chunk.choices[0].delta
-            line = {
-                "choices": [
-                    {
-                        "delta": {
-                            "role": chunk_message.role,
-                            "content": chunk_message.content,
-                        }
-                    }
-                ]
-            }
-            if (
-                hasattr(chunk.choices[0], "usage")
-                and chunk.choices[0].usage is not None
-            ):
-                chunk_usage = chunk.choices[0].usage
-                line["usage"] = {
-                    "prompt_tokens": chunk_usage["prompt_tokens"],
-                    "completion_tokens": chunk_usage["completion_tokens"],
-                    "total_tokens": chunk_usage["total_tokens"],
-                }
-            yield json.dumps(line) + "\n\n"
+    def create_model_response_wrapper(self, result, model):
+        # 调用 response_model 中的 create_model_response 方法
+        return self.response_model.create_model_response(result, model=model)
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
@@ -77,13 +56,12 @@ class MoonshotAIProvider(BaseProvider):
             stream = kwargs.get("stream", False)
 
             if stream:
-                print("start stream processing...")
-                return self.post_stream_processing(model, messages, **new_kwargs)
+                return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             else:
                 result = self.client.chat.completions.create(
                     model=model, messages=messages, **new_kwargs
                 )
-                return create_model_response(result, model=model)
+                return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):
                 raise MoonshotOpenAIError(status_code=e.status_code, message=str(e))

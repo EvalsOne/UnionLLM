@@ -1,5 +1,5 @@
 from .base_provider import BaseProvider
-from cnlitellm.utils import create_minimax_model_response
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage
 import requests
 import json
 import logging
@@ -14,33 +14,30 @@ class MinimaxOpenAIError(Exception):
         self.message = message
         super().__init__(self.message)
 
-
 class MinimaxAIProvider(BaseProvider):
-    def __init__(self, api_key: str = None):
-        self.api_key = api_key
+    def __init__(self, **model_kwargs):
+        self.api_key = model_kwargs.get("api_key")
+        self.endpoint_url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
 
     def pre_processing(self, **kwargs):
-        if "api_key" in kwargs:
-            self.api_key = kwargs.get("api_key")
-            kwargs.pop("api_key")
-
-        if "temperature" in kwargs:
-            temperature = kwargs.get("temperature")
-            if temperature > 1 or temperature < 0:
-                raise MinimaxOpenAIError(
-                    status_code=422, message="Temperature must be between 0 and 1"
-                )
+        supported_params = [
+            "model", "messages", "max_tokens", "temperature", "top_p", "n",
+            "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
+            "best_of", "logit_bias"
+        ]
+        for key in list(kwargs.keys()):
+            if key not in supported_params:
+                kwargs.pop(key)
         return kwargs
 
-    def post_stream_processing(self, model, messages, **new_kwargs):
-        url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+    def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
-        result = requests.post(url, headers=headers, data=payload)
-        for line in result.iter_lines():
+        response = requests.post(self.endpoint_url, headers=headers, data=payload)
+        for line in response.iter_lines():
             if line:
                 new_line = line.decode("utf-8").replace("data: ", "")
                 data = json.loads(new_line)
@@ -48,24 +45,52 @@ class MinimaxAIProvider(BaseProvider):
                 if choices:
                     choice = choices[0]
                     delta = choice.get("delta")
-                    if not delta:
-                        continue
-                    chunk_message = delta
-                    chunk_line = {
-                        "choices": [
-                            {
-                                "delta": {
-                                    "role": chunk_message["role"],
-                                    "content": chunk_message["content"],
+                    if delta:
+                        chunk_message = delta
+                        chunk_line = {
+                            "choices": [
+                                {
+                                    "delta": {
+                                        "role": chunk_message["role"],
+                                        "content": chunk_message["content"],
+                                    }
                                 }
-                            }
-                        ]
-                    }
+                            ]
+                        }
+                    else:
+                        chunk_line = {}
                     if "usage" in data:
                         chunk_line["usage"] = {
                             "total_tokens": data["usage"]["total_tokens"],
                         }
                     yield json.dumps(chunk_line) + "\n\n"
+
+    def create_model_response_wrapper(self, result, model):
+        response_dict = result.json()
+        choices = []
+        for choice in response_dict["choices"]:
+            message = Message(
+                content=choice["message"]["content"],
+                role=choice["message"]["role"]
+            )
+            choices.append(
+                Choices(
+                    message=message,
+                    index=choice["index"],
+                    finish_reason=choice["finish_reason"],
+                )
+            )
+        usage = Usage(
+            total_tokens=response_dict["usage"]["total_tokens"],
+        )
+        response = ModelResponse(
+            id=response_dict["id"],
+            choices=choices,
+            created=response_dict["created"],
+            model=model,
+            usage=usage,
+        )
+        return response
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
@@ -77,17 +102,16 @@ class MinimaxAIProvider(BaseProvider):
             stream = kwargs.get("stream", False)
 
             if stream:
-                return self.post_stream_processing(model, messages, **new_kwargs)
+                return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
+            
             else:
-                url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
-                payload = json.dumps({"model": model, "messages": messages, **kwargs})
+                payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 }
-                result = requests.post(url, headers=headers, data=payload)
-                logging.info(f"result: {result}")
-                return create_minimax_model_response(result, model=model)
+                result = requests.post(self.endpoint_url, headers=headers, data=payload)
+                return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):
                 raise MinimaxOpenAIError(status_code=e.status_code, message=str(e))

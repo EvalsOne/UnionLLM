@@ -8,10 +8,14 @@ setup(
     description='A Python library for unified access to Chinese domestic large language models.',
     author='everfly',
     author_email='tagriver@gmail.com',
-    url='https://github.com/EvalsOne/CNLiteLLM',  # Optional
+    url='https://github.com/EvalsOne/CNLiteLLM',
     install_requires=[
         'openai',
         'pydantic',
-        'zhipuai'  # 假设'zhipuai'是一个有效的Python包名
+        'zhipuai',
+        'tenacity',
+        'dashscope',
+        'websocket_client',
+        'requests'
     ],
 )

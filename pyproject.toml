@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "cnlitellm"
+version = "0.1"
+description = "A Python library for unified access to Chinese domestic large language models."
+license = "MIT"
+homepage = "https://github.com/EvalsOne/CNLiteLLM"
+authors = ["everfly <tagriver@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "*"
+dashscope = "*"
+openai = "*"
+pydantic = "*"
+requests = "*"
+tenacity = "*"
+websocket-client = "*"
+zhipuai = "*"

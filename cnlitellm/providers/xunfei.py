@@ -77,6 +77,7 @@ class XunfeiWebSocketClient:
         self.spark_url = self.get_spark_url(model)
         self.domain = self.model
 
+    # 获取模型对应的spark_url
     def get_spark_url(self, model):
         if model == "generalv3.5":
             return "wss://spark-api.xf-yun.com/v3.5/chat"
@@ -163,52 +164,12 @@ class XunfeiWebSocketClient:
         wst.join()  # 确保WebSocket线程已结束
         return self.answer, {"prompt_tokens": self.prompt_tokens, "completion_tokens": self.completion_tokens}, self.error
 
-def create_xunfei_model_response(answer, usage, model):
-    # You can customize this function to format the response as needed
-    return {
-        "choices": [{"text": answer}],
-        "usage": usage,
-        "model": model
-    }
-
-def create_xunfei_model_response(result: str, usage, model: str) -> ModelResponse:
-    choices = []
-
-    message = Message(
-        content=result, role="assistant"
-    )
-    choices.append(
-        Choices(
-            message=message,
-            index=0,
-            finish_reason="stop",
-        )
-    )
-
-    prompt_tokens = usage["prompt_tokens"]
-    completion_tokens = usage["completion_tokens"]
-    
-    usage = Usage(
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        total_tokens=prompt_tokens+completion_tokens
-    )
-
-    response = ModelResponse(
-        id="response",
-        choices=choices,
-        created=int(time.time()),
-        model=model,
-        usage=usage,
-    )
-    return response
-
 
 class XunfeiAIProvider(BaseProvider):
-    def __init__(self, app_id: str = None, api_key: str = None, api_secret: str = None):
-        self.app_id = app_id
-        self.api_key = api_key
-        self.api_secret = api_secret
+    def __init__(self, **model_kwargs):
+        self.app_id = model_kwargs.get("app_id")
+        self.api_key = model_kwargs.get("api_key")
+        self.api_secret = model_kwargs.get("api_secret")
 
     def pre_processing(self, **kwargs):
         if "app_id" in kwargs:
@@ -220,16 +181,48 @@ class XunfeiAIProvider(BaseProvider):
         if "api_secret" in kwargs:
             self.api_secret = kwargs.get("api_secret")
             kwargs.pop("api_secret")
-        return kwargs
 
-    def post_processing(self, model, messages, **new_kwargs):
-        client = XunfeiWebSocketClient(self.app_id, self.api_key, self.api_secret, model, **new_kwargs)
-        answer, usage, error = client.connect(messages)
-        logging.info(f"Response: {answer}")
-        logging.info(f"Usage: {usage}")
-        if error:
-            raise XunfeiOpenAIError(status_code=500, message=error)
-        return create_xunfei_model_response(answer, usage, model=model)
+        # 处理参数兼容性问题，不支持的参数全部舍弃
+        supported_params = [
+            "model", "messages", "max_tokens", "temperature", "top_p", "top_k", 
+        ]
+        for key in list(kwargs.keys()):
+            if key not in supported_params:
+                kwargs.pop(key)
+
+        return kwargs
+    
+    def create_model_response_wrapper(self, result: str, usage, model: str) -> ModelResponse:
+        choices = []
+
+        message = Message(
+            content=result, role="assistant"
+        )
+        choices.append(
+            Choices(
+                message=message,
+                index=0,
+                finish_reason="stop",
+            )
+        )
+
+        prompt_tokens = usage["prompt_tokens"]
+        completion_tokens = usage["completion_tokens"]
+        
+        usage = Usage(
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=prompt_tokens+completion_tokens
+        )
+
+        response = ModelResponse(
+            id="response",
+            choices=choices,
+            created=int(time.time()),
+            model=model,
+            usage=usage,
+        )
+        return response
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
@@ -238,7 +231,13 @@ class XunfeiAIProvider(BaseProvider):
                     status_code=422, message="Missing model or messages"
                 )
             new_kwargs = self.pre_processing(**kwargs)
-            return self.post_processing(model, messages, **new_kwargs)
+
+            client = XunfeiWebSocketClient(self.app_id, self.api_key, self.api_secret, model, **new_kwargs)
+            answer, usage, error = client.connect(messages)
+            if error:
+                raise XunfeiOpenAIError(status_code=500, message=error)
+            return self.create_model_response_wrapper(answer, usage, model=model)
+        
         except Exception as e:
             if hasattr(e, "status_code"):
                 raise XunfeiOpenAIError(status_code=e.status_code, message=str(e))
