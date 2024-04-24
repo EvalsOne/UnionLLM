@@ -115,17 +115,25 @@ class CozeAIProvider(BaseProvider):
         results = []
         cotext_pre = []
 
+        print("messages is:",messages)
+
         for message in messages:
             # 根据消息类型处理数据
             if message['role'] == 'assistant' and message['type'] == 'knowledge':
                 # 解析知识型内容
                 content = message['content']
+                print("content is:",content)
+
                 # 假设knowledge类型内容是由"---\nrecall slice X:\n"分隔的
                 slices = content.split('---\n')
                 for slice in slices:
                     if slice.strip().startswith('recall slice'):
                         # 去掉前缀找到JSON部分
                         json_part = slice.strip().split('\n', 1)[-1].strip()
+                        # 如果不是以\"}结尾，则强制添加
+                        if not json_part.endswith('\"}'):
+                            json_part += '\"}'
+
                         try:
                             # 尝试解析JSON数据
                             recall_data = json.loads(json_part)
