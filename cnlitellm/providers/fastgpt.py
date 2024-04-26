@@ -90,17 +90,19 @@ class FastGPTProvider(BaseProvider):
                                             "content": content,
                                         }    
                                     )
-                chunk_response = ModelResponse(
-                    id=data['id'] if 'id' in data else None,
-                    choices=chunk_choices,
-                    context=chunk_context,
-                    created=int(time.time()),
-                    model=model,
-                    usage=chunk_usage if chunk_usage else None,
-                    stream=True
-                )
-                index += 1
-                yield chunk_response
+                
+                    print("data", line)
+                    chunk_response = ModelResponse(
+                        id=data['id'] if 'id' in data else None,
+                        choices=chunk_choices,
+                        context=chunk_context,
+                        created=int(time.time()),
+                        model=model,
+                        usage=chunk_usage if chunk_usage else None,
+                        stream=True
+                    )
+                    index += 1
+                    yield chunk_response
 
     def create_model_response_wrapper(self, result):
         response_dict = result.json()

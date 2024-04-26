@@ -44,8 +44,7 @@ class DifyAIProvider(BaseProvider):
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         # 预处理对话内容并返回最近的用户问题
         messages, query = self.to_formatted_prompt(messages)
-        stream = new_kwargs.get("stream", False)
-        mode = "streaming" if stream else "blocking"
+        mode = "streaming"
         payload = json.dumps({"query": query, "response_mode": mode, "user": "abc-123","conversation_id": "","inputs":{}})
 
         headers = {
@@ -60,25 +59,27 @@ class DifyAIProvider(BaseProvider):
             if line:
                 chunk_choices = []
                 chunk_context = []
+                chunk_delta = Delta()
                 # judge if the new_line begins with "data:"
                 if line.startswith(b"data:"):
                     new_line = line.decode("utf-8").replace("data: ", "")
                     if new_line == "[DONE]":
                         continue
-
+                    
+                    
                     data = json.loads(new_line)
                     print("data is:",data)
-                    if "answer" in data:
-                        chunk_message = data["answer"]
-                        chunk_delta = Delta()
-                        if chunk_message:
-                            if "role" in chunk_message:
+                    event = data.get("event")
+                    msg_id = data.get("message_id")
+                    if event == "message":
+                        if 'answer' in data:
+                            chunk_message = data["answer"]
+                            if chunk_message:
                                 chunk_delta.role = "assistant"
-                            if "content" in chunk_message:
                                 chunk_delta.content = chunk_message
-                            chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
+                                chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
 
-                    if "metadata" in data:
+                    if event == "message_end" and "metadata" in data:
                         metadata = data["metadata"]
                         if "usage" in metadata:
                             usage_info = metadata["usage"]
@@ -97,7 +98,7 @@ class DifyAIProvider(BaseProvider):
                                     "score": resource["score"],    
                                 })
                     chunk_response = ModelResponse(
-                        id="hello",
+                        id=msg_id,
                         choices=chunk_choices,
                         context=chunk_context,
                         created=int(time.time()),
@@ -167,11 +168,16 @@ class DifyAIProvider(BaseProvider):
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 
+            print("stream is:", stream)
+
             if stream:
                 return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
             else:
                 messages, query = self.to_formatted_prompt(messages)
-                mode = "streaming" if stream == 'streaming' else "blocking"
+                mode = "blocking"
+
+                print("mode is:", mode)
+
                 payload = json.dumps({"query": query, "response_mode": mode, "user": "abc-123","conversation_id": "","inputs":{}})
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
