@@ -3,7 +3,7 @@ import requests
 import json
 import hashlib
 from .base_provider import BaseProvider
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 
 class TianGongOpenAIError(Exception):
     def __init__(
@@ -52,27 +52,38 @@ class TianGongAIProvider(BaseProvider):
             "stream": "true",
         }
         result = requests.post(self.endpoint_url, headers=headers, json=payload, stream=True)
+        index = 0
         for line in result.iter_lines():
             if line:
                 new_line = json.loads(line.decode('utf-8'))
-                chunk_line = {
-                    "choices": [
-                        {
-                            "delta": {
-                                "role": "assistant",
-                                "content": new_line["resp_data"]["reply"],
-                            }
-                        }
-                    ]
-                }
-                if "usage" in new_line["resp_data"]:
-                    chunk_usage = new_line["resp_data"]["usage"]
-                    chunk_line["usage"] = {
-                        "prompt_tokens": chunk_usage["prompt_tokens"],
-                        "completion_tokens": chunk_usage["completion_tokens"],
-                        "total_tokens": chunk_usage["total_tokens"],
-                    }
-                yield json.dumps(chunk_line) + "\n\n"
+                chunk_choices = []
+                chunk_delta = Delta()
+                if 'reply' in new_line["resp_data"]:
+                    chunk_delta.role = "assistant"
+                    chunk_delta.content=new_line["resp_data"]["reply"]
+                    chunk_choices.append(StreamingChoices(index=index, delta=chunk_delta))
+
+                if 'usage' in new_line["resp_data"]:
+                    chunk_usage = Usage()
+                    if "input_tokens" in new_line["resp_data"]["usage"]:
+                        chunk_usage.prompt_tokens = new_line["resp_data"]["usage"]["prompt_tokens"],
+                    if "output_tokens" in new_line["resp_data"]["usage"]:
+                        chunk_usage.completion_tokens = new_line["resp_data"]["usage"]["output_tokens"]
+                    if "total_tokens" in new_line["resp_data"]["usage"]:
+                        chunk_usage.total_tokens = new_line["resp_data"]["usage"]["total_tokens"]
+                else:
+                    chunk_usage = None
+
+                chunk_response = ModelResponse(
+                    id=new_line['trace_id'],
+                    choices=chunk_choices,
+                    created=int(time.time()),
+                    model=model,
+                    usage=chunk_usage if chunk_usage else None,
+                    stream=True
+                )
+                index += 1
+                yield chunk_response
 
     def create_model_response_wrapper(self, result, model):
         response_dict = result.json()
@@ -98,6 +109,7 @@ class TianGongAIProvider(BaseProvider):
             usage=usage,
         )
         return response
+
 
     def completion(self, model: str, messages: list, **kwargs):
         try:

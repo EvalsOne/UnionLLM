@@ -1,6 +1,6 @@
 import json
 from .base_provider import BaseProvider
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Context
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Context, Delta, StreamingChoices
 import requests
 import logging, json, time
 
@@ -53,7 +53,9 @@ class DifyAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
-
+        chunk_choices = []
+        chunk_context = []
+        index = 0
         for line in response.iter_lines():
             if line:
                 # judge if the new_line begins with "data:"
@@ -63,44 +65,53 @@ class DifyAIProvider(BaseProvider):
                         continue
 
                     data = json.loads(new_line)
-                    chunk_line = {}
+                    print("data is:",data)
                     if "answer" in data:
                         chunk_message = data["answer"]
+                        chunk_delta = Delta()
                         if chunk_message:
-                            chunk_line["choices"] = [
-                                {
-                                    "delta": {
-                                        "role": "assistant",
-                                        "content": chunk_message,
-                                    }
-                                }
-                            ]
+                            if "role" in chunk_message:
+                                chunk_delta.role = "assistant"
+                            if "content" in chunk_message:
+                                chunk_delta.content = chunk_message
+                            chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
 
                     if "metadata" in data:
-                        context = []
                         metadata = data["metadata"]
                         if "usage" in metadata:
                             usage_info = metadata["usage"]
-                            chunk_line["usage"] = {
-                                "total_tokens": usage_info["total_tokens"],
-                                "prompt_tokens": usage_info["prompt_tokens"],
-                                "completion_tokens": usage_info["completion_tokens"],
-                            }
+                            chunk_usage = Usage()
+                            if "prompt_tokens" in usage_info:
+                                chunk_usage.prompt_tokens = usage_info["prompt_tokens"]
+                            if "completion_tokens" in usage_info:
+                                chunk_usage.completion_tokens = usage_info["completion_tokens"]
+                            if "total_tokens" in usage_info:
+                                chunk_usage.total_tokens = usage_info["total_tokens"]
 
                         if 'retriever_resources' in metadata:
-                            context = []
                             for resource in metadata['retriever_resources']:
-                                context.append({
+                                chunk_context.append({
                                     "id": resource["position"],
                                     "content": resource["content"],
                                     "score": resource["score"],    
                                 })
-                            chunk_line["context"] = context
 
-                    if chunk_line:
-                        yield json.dumps(chunk_line) + "\n\n"
+                    chunk_response = ModelResponse(
+                        id="hello",
+                        choices=chunk_choices,
+                        context=chunk_context,
+                        created=int(time.time()),
+                        model=model,
+                        usage=chunk_usage if chunk_usage else None,
+                        stream=True
+                    )
+                    index += 1
+                    yield chunk_response
 
     def create_model_response_wrapper(self, result, model):
+
+        print("result of dify:", result.json())
+
         response_dict = result.json()
         choices = []
         context = []
@@ -122,16 +133,19 @@ class DifyAIProvider(BaseProvider):
             total_tokens=response_dict['metadata']["usage"]["total_tokens"],
         )
 
-        retrieved_resources = response_dict['metadata']["retriever_resources"]
-        if retrieved_resources is not None:
-            for resource in retrieved_resources:
-                context.append(
-                    Context(
-                        id=resource["position"],
-                        content=resource["content"],
-                        score=resource["score"],
+        if 'retriever_resources' in response_dict['metadata']:
+            retrieved_resources = response_dict['metadata']["retriever_resources"]
+            if retrieved_resources is not None:
+                for resource in retrieved_resources:
+                    context.append(
+                        Context(
+                            id=resource["position"],
+                            content=resource["content"],
+                            score=resource["score"],
+                        )
                     )
-                )
+        else:
+            context = []
 
         response = ModelResponse(
             id=response_dict["id"],

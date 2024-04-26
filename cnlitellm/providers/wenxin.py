@@ -4,7 +4,7 @@ import json
 import logging
 import hashlib
 from .base_provider import BaseProvider
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 
 class WenXinOpenAIError(Exception):
     def __init__(
@@ -52,30 +52,43 @@ class WenXinAIProvider(BaseProvider):
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
         headers = {"Content-Type": "application/json"}
+        index = 0
         for line in requests.post(self.endpoint_url, headers=headers, data=payload, stream=True).iter_lines():
             if line:
                 try:
                     # Remove the "data: " prefix before decoding the JSON
                     line_without_prefix = line.decode('utf-8').removeprefix('data: ')
                     new_line = json.loads(line_without_prefix)
-                    chunk_line = {
-                        "choices": [
-                            {
-                                "delta": {
-                                    "role": "assistant",
-                                    "content": new_line.get("result", ""),
-                                }
-                            }
-                        ]
-                    }
-                    if "usage" in new_line:
-                        chunk_usage = new_line["usage"]
-                        chunk_line["usage"] = {
-                            "prompt_tokens": chunk_usage.get("prompt_tokens", 0),
-                            "completion_tokens": chunk_usage.get("completion_tokens", 0),
-                            "total_tokens": chunk_usage.get("total_tokens", 0),
-                        }
-                    yield json.dumps(chunk_line) + "\n\n"
+                    print(new_line)
+
+                    chunk_choices = []
+                    chunk_delta = Delta()
+                    if new_line.get("result"):
+                        chunk_delta.role = "assistant"
+                        chunk_delta.content=new_line.get("result", "")
+                        chunk_choices.append(StreamingChoices(index=index, delta=chunk_delta))
+                    if 'usage' in new_line:
+                        chunk_usage = Usage()
+                        if "input_tokens" in chunk_usage:
+                            chunk_usage.prompt_tokens = chunk_usage.get("prompt_tokens", 0),
+                        if "output_tokens" in chunk_usage:
+                            chunk_usage.completion_tokens = chunk_usage.get("completion_tokens", 0),
+                        if "total_tokens" in chunk_usage:
+                            chunk_usage.total_tokens = chunk_usage.get("total_tokens", 0)
+                    else:
+                        chunk_usage = None
+
+                    chunk_response = ModelResponse(
+                        id="hello",
+                        choices=chunk_choices,
+                        created=int(time.time()),
+                        model=model,
+                        usage=chunk_usage if chunk_usage else None,
+                        stream=True
+                    )
+                    index += 1
+                    yield chunk_response
+
                 except json.JSONDecodeError:
                     # Log the error or handle it as needed
                     continue

@@ -34,9 +34,6 @@ class BaseProvider(ABC):
             completion_tokens=openai_response.usage.completion_tokens,
             total_tokens=openai_response.usage.total_tokens
         )
-
-        print("choices: ", choices)
-
         response =  ModelResponse(
             id=openai_response.id,
             choices=choices,
@@ -44,5 +41,4 @@ class BaseProvider(ABC):
             model=model,
             usage=usage
         )
-        print("response: ", response)
         pass

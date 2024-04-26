@@ -1,6 +1,6 @@
 from .base_provider import BaseProvider
 from cnlitellm.utils import ResponseModelInterface
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Context, generate_unique_uid
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Context, generate_unique_uid, Delta, StreamingChoices
 from openai import OpenAI
 import logging, json, time, requests
 
@@ -68,8 +68,11 @@ class CozeAIProvider(BaseProvider):
                         continue
 
                     data = json.loads(new_line)
+                    print("data is:",data)
                     chunk_line = {}
-                    context = []
+                    chunk_context = []
+                    chunk_choices = []
+                    index = 0
                     if "message" in data:
                         message = data["message"]
                         if message['role'] == 'assistant' and message['type'] == 'knowledge':
@@ -78,33 +81,46 @@ class CozeAIProvider(BaseProvider):
                             conversation_id = data.get('conversation_id', 0)
                             # 假设knowledge类型内容是由"---\nrecall slice X:\n"分隔的
                             slices = content.split('---\n')
+                            index = 0
                             for slice in slices:
                                 if slice.strip().startswith('recall slice'):
                                     # 去掉前缀找到JSON部分
                                     json_part = slice.strip().split('\n', 1)[-1].strip()
+                                    # 如果不是以\"}结尾，则强制添加
+                                    if not json_part.endswith('\"}'):
+                                        json_part += '\"}'
                                     try:
                                         # 尝试解析JSON数据
                                         recall_data = json.loads(json_part)
-                                        context.append({
-                                            "id": conversation_id,
+                                        chunk_context.append({
+                                            "id": index,
                                             "content": str(recall_data)    
                                         })
+                                        index += 1
                                     except json.JSONDecodeError:
                                         raise CozeAIError(status_code=500, message=f"Error decoding JSON from slice: {json_part}")
-                            chunk_line["context"] = context
 
                         elif message['role'] == 'assistant' and message['type'] == 'answer':
-                            # 直接添加回复内容
-                            chunk_line["choices"] = [
-                                {
-                                    "delta": {
-                                        "role": message['role'],
-                                        "content": message["content"],
-                                    }
-                                }
-                            ]
-                    if chunk_line:
-                        yield json.dumps(chunk_line) + "\n\n"
+                            chunk_choices = []
+                            chunk_delta = Delta()
+                            if "role" in message:
+                                chunk_delta.role = message["role"]
+                            if "content" in message:
+                                chunk_delta.content = message["content"]
+                            chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
+                        
+                        chunk_usage = Usage()
+                        chunk_response = ModelResponse(
+                            id=conversation_id,
+                            choices=chunk_choices,
+                            context=chunk_context,
+                            created=int(time.time()),
+                            model=model,
+                            usage=chunk_usage if chunk_usage else None,
+                            stream=True
+                        )
+                        index += 1
+                        yield chunk_response
 
     def create_model_response_wrapper(self, result, model):
         choices = []

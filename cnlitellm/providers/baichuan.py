@@ -1,6 +1,6 @@
 import json
 from .base_provider import BaseProvider
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 import requests
 import logging
 
@@ -43,25 +43,35 @@ class BaiChuanAIProvider(BaseProvider):
                 if new_line == "[DONE]":
                     break
                 data = json.loads(new_line)
-                chunk_message = data["choices"][0]["delta"]
-                chunk_line = {
-                    "choices": [
-                        {
-                            "delta": {
-                                "role": chunk_message["role"],
-                                "content": chunk_message["content"],
-                            }
-                        }
-                    ]
-                }
+                chunk_choices = []
+                for choice in data["choices"]:
+                    chunk_delta = Delta()
+                    delta = choice.get("delta")
+                    if delta:
+                        if "role" in choice['delta']:
+                            chunk_delta.role = choice['delta']["role"]
+                        if "content" in choice['delta']:
+                            chunk_delta.content = choice['delta']["content"]
+                        chunk_choices.append(StreamingChoices(index=choice['index'], delta=chunk_delta))
+
                 if "usage" in data:
-                    usage_info = data["usage"]
-                    chunk_line["usage"] = {
-                        "total_tokens": usage_info["total_tokens"],
-                        "prompt_tokens": usage_info["prompt_tokens"],
-                        "completion_tokens": usage_info["completion_tokens"],
-                    }
-                yield json.dumps(chunk_line) + "\n\n"
+                    chunk_usage = Usage()
+                    if "prompt_tokens" in data["usage"]:
+                        chunk_usage.prompt_tokens = data["usage"]["prompt_tokens"]
+                    if "completion_tokens" in data["usage"]:
+                        chunk_usage.completion_tokens = data["usage"]["completion_tokens"]
+                    if "total_tokens" in data["usage"]:
+                        chunk_usage.total_tokens = data["usage"]["total_tokens"]
+                
+                chunk_response = ModelResponse(
+                    id=data["id"],
+                    choices=chunk_choices,
+                    created=data["created"],
+                    model=model,
+                    usage=chunk_usage if "usage" in data else None,
+                    stream=True
+                )
+                yield chunk_response
 
     def create_model_response_wrapper(self, result, model):
         response_dict = result.json()

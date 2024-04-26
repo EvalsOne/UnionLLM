@@ -3,7 +3,7 @@ import dashscope
 from .base_provider import BaseProvider
 from http import HTTPStatus
 from dashscope import Generation
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 
 class QwenOpenAIError(Exception):
     def __init__(
@@ -41,25 +41,39 @@ class QwenAIProvider(BaseProvider):
         )
         for response in responses:
             if response.status_code == HTTPStatus.OK:
-                chunk_message = response.output.choices[0].message
-                line = {
-                    "choices": [
-                        {
-                            "delta": {
-                                "role": chunk_message.role,
-                                "content": chunk_message.content,
-                            }
-                        }
-                    ]
-                }
+                # chunk_message = response.output.choices[0].message
+                chunk_choices = []
+                index = 0
+                for choice in response.output.choices:
+                    chunk_message = choice.message
+                    chunk_delta = Delta()
+                    if chunk_message:
+                        if "role" in chunk_message:
+                            chunk_delta.role = chunk_message["role"]
+                        if "content" in chunk_message:
+                            chunk_delta.content = chunk_message["content"]
+                        chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
+
                 if hasattr(response, "usage") and response.usage is not None:
-                    chunk_usage = response.usage
-                    line["usage"] = {
-                        "prompt_tokens": chunk_usage["input_tokens"],
-                        "completion_tokens": chunk_usage["output_tokens"],
-                        "total_tokens": chunk_usage["total_tokens"],
-                    }
-                yield json.dumps(line) + "\n\n"
+                    chunk_usage = Usage()
+                    if "input_tokens" in response.usage:
+                        chunk_usage.prompt_tokens = response.usage["input_tokens"]
+                    if "output_tokens" in response.usage:
+                        chunk_usage.completion_tokens = response.usage["output_tokens"]
+                    if "total_tokens" in response.usage:
+                        chunk_usage.total_tokens = response.usage["total_tokens"]
+
+                chunk_response = ModelResponse(
+                    id=response.request_id,
+                    choices=chunk_choices,
+                    created=int(time.time()),
+                    model=model,
+                    usage=chunk_usage if chunk_usage else None,
+                    stream=True
+                )
+                index += 1
+                yield chunk_response
+
             else:
                 raise QwenOpenAIError(
                     status_code=response.status_code,

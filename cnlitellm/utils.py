@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from openai import OpenAIError as OriginalError
 from typing import List, Union, Optional
 
-import uuid, time, openai, random
+import uuid, time, openai, random, requests
 from openai._models import BaseModel as OpenAIObject
 
 # from .exceptions import (
@@ -283,30 +283,89 @@ class ModelResponse(OpenAIObject):
         setattr(self, key, value)
 
 class ResponseModelInterface:
-    def post_stream_processing(self, response):
+    def post_stream_processing(self, response, model=None):
         for chunk in response:
-            chunk_message = chunk.choices[0].delta
-            line = {
-                "choices": [
-                    {
-                        "delta": {
-                            "role": chunk_message.role,
-                            "content": chunk_message.content,
-                        }
-                    }
-                ]
-            }
-            if (
-                hasattr(chunk.choices[0], "usage")
-                and chunk.choices[0].usage is not None
-            ):
-                chunk_usage = chunk.choices[0].usage
-                line["usage"] = {
-                    "prompt_tokens": chunk_usage["prompt_tokens"],
-                    "completion_tokens": chunk_usage["completion_tokens"],
-                    "total_tokens": chunk_usage["total_tokens"],
-                }
-            yield json.dumps(line) + "\n\n"
+            print("chunk: ", chunk)
+            data = chunk.json()
+            if isinstance(data, str):
+                data = json.loads(data)
+            if 'choices' in data:
+                choices = data['choices']
+                chunk_choices = []
+                for choice in choices:
+                    delta = choice.get("delta")
+                    if delta:
+                        chunk_delta = Delta()
+                        if "role" in choice['delta']:
+                            chunk_delta.role = choice['delta']["role"]
+                        if "content" in choice['delta']:
+                            chunk_delta.content = choice['delta']["content"]
+                        chunk_choices.append(StreamingChoices(index=choice['index'], delta=chunk_delta))
+
+            if "usage" in data:
+                chunk_usage = Usage()
+                if data["usage"]:
+                    if "prompt_tokens" in data["usage"]:
+                        chunk_usage.prompt_tokens = data["usage"]["prompt_tokens"]
+                    if "completion_tokens" in data["usage"]:
+                        chunk_usage.completion_tokens = data["usage"]["completion_tokens"]
+                    if "total_tokens" in data["usage"]:
+                        chunk_usage.total_tokens = data["usage"]["total_tokens"]
+            
+            chunk_response = ModelResponse(
+                id=data["id"],
+                choices=chunk_choices,
+                created=data["created"],
+                model=model,
+                usage=chunk_usage if "usage" in data else None,
+                stream=True
+            )
+            yield chunk_response
+
+    def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
+        payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        response = requests.post(self.endpoint_url, headers=headers, data=payload)
+        for line in response.iter_lines():
+            print("line: ", line)
+            if line:
+                new_line = line.decode("utf-8").replace("data: ", "")
+                if new_line == "[DONE]":
+                    break
+                data = json.loads(new_line)
+                chunk_choices = []
+                for choice in data["choices"]:
+                    chunk_delta = Delta()
+                    delta = choice.get("delta")
+                    if delta:
+                        if "role" in choice['delta']:
+                            chunk_delta.role = choice['delta']["role"]
+                        if "content" in choice['delta']:
+                            chunk_delta.content = choice['delta']["content"]
+                        chunk_choices.append(StreamingChoices(index=choice['index'], delta=chunk_delta))
+
+                if "usage" in data:
+                    chunk_usage = Usage()
+                    if "prompt_tokens" in data["usage"]:
+                        chunk_usage.prompt_tokens = data["usage"]["prompt_tokens"]
+                    if "completion_tokens" in data["usage"]:
+                        chunk_usage.completion_tokens = data["usage"]["completion_tokens"]
+                    if "total_tokens" in data["usage"]:
+                        chunk_usage.total_tokens = data["usage"]["total_tokens"]
+                
+                chunk_response = ModelResponse(
+                    id=data["id"],
+                    choices=chunk_choices,
+                    created=data["created"],
+                    model=model,
+                    usage=chunk_usage if "usage" in data else None,
+                    stream=True
+                )
+                yield chunk_response
+
 
     def create_model_response(
         self, openai_response: openai.ChatCompletion, model: str

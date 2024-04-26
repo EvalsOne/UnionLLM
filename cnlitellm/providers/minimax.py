@@ -1,5 +1,5 @@
 from .base_provider import BaseProvider
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 import requests
 import json
 import logging
@@ -42,28 +42,31 @@ class MinimaxAIProvider(BaseProvider):
                 new_line = line.decode("utf-8").replace("data: ", "")
                 data = json.loads(new_line)
                 choices = data.get("choices", [])
+                chunk_choices = []
                 if choices:
-                    choice = choices[0]
-                    delta = choice.get("delta")
-                    if delta:
-                        chunk_message = delta
-                        chunk_line = {
-                            "choices": [
-                                {
-                                    "delta": {
-                                        "role": chunk_message["role"],
-                                        "content": chunk_message["content"],
-                                    }
-                                }
-                            ]
-                        }
-                    else:
-                        chunk_line = {}
+                    for choice in choices:
+                        chunk_delta = Delta()
+                        delta = choice.get("delta")
+                        if delta:
+                            if "role" in choice['delta']:
+                                chunk_delta.role = choice['delta']["role"]
+                            if "content" in choice['delta']:
+                                chunk_delta.content = choice['delta']["content"]
+                            chunk_choices.append(StreamingChoices(index=choice['index'], delta=chunk_delta))
                     if "usage" in data:
-                        chunk_line["usage"] = {
-                            "total_tokens": data["usage"]["total_tokens"],
-                        }
-                    yield json.dumps(chunk_line) + "\n\n"
+                        chunk_usage = Usage()
+                        if "total_tokens" in data["usage"]:
+                            chunk_usage.total_tokens = data["usage"]["total_tokens"]
+
+                chunk_response = ModelResponse(
+                    id=data["id"],
+                    choices=chunk_choices,
+                    created=data["created"],
+                    model=model,
+                    usage=chunk_usage if "usage" in data else None,
+                    stream=True
+                )
+                yield chunk_response
 
     def create_model_response_wrapper(self, result, model):
         response_dict = result.json()

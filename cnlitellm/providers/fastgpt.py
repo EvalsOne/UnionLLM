@@ -1,6 +1,6 @@
 from .base_provider import BaseProvider
 from cnlitellm.utils import ResponseModelInterface
-from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Context
+from cnlitellm.utils import ModelResponse, Message, Choices, Usage, Context, Delta, StreamingChoices
 from openai import OpenAI
 import logging, json, time, requests
 
@@ -44,7 +44,9 @@ class FastGPTProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
-
+        chunk_choices = []
+        chunk_context = []
+        index = 0
         # 解析stream返回信息并生成OpenAI兼容格式
         for line in response.iter_lines():
             if line:
@@ -53,47 +55,56 @@ class FastGPTProvider(BaseProvider):
                     if new_line == "[DONE]":
                         continue
                     data = json.loads(new_line)
-                    chunk_line = {}
+                    print("data is:",data)
+
                     if "choices" in data:
                         chunk_message = data["choices"][0]["delta"]
+                        chunk_delta = Delta()
                         if chunk_message:
-                            chunk_line["choices"] = [
-                                {
-                                    "delta": {
-                                        "role": chunk_message["role"],
-                                        "content": chunk_message["content"],
-                                    }
-                                }
-                            ]
+                            if "role" in chunk_message:
+                                chunk_delta.role = chunk_message['role']
+                            if "content" in chunk_message:
+                                chunk_delta.content = chunk_message['content']
+                            chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
 
                     if "usage" in data:
                         usage_info = data["usage"]
-                        chunk_line["usage"] = {
-                            "total_tokens": usage_info["total_tokens"],
-                            "prompt_tokens": usage_info["prompt_tokens"],
-                            "completion_tokens": usage_info["completion_tokens"],
-                        }
+                        chunk_usage = Usage()
+                        if "prompt_tokens" in usage_info:
+                            chunk_usage.prompt_tokens = usage_info["prompt_tokens"]
+                        if "completion_tokens" in usage_info:
+                            chunk_usage.completion_tokens = usage_info["completion_tokens"]
+                        if "total_tokens" in usage_info:
+                            chunk_usage.total_tokens = usage_info["total_tokens"]
+                    else:
+                        chunk_usage = None
 
                     if isinstance(data, list):
                         for module in data:
                             if "quoteList" in module:
-                                context = []
                                 for quote in module["quoteList"]:
                                     content = f'question:[{quote["q"]}], answer:[{quote["a"]}]'
-                                    context.append(
+                                    chunk_context.append(
                                         {
                                             "id": quote["id"],
                                             "content": content,
                                         }    
                                     )
-
-                                chunk_line["context"] = context
-
-                    if chunk_line:
-                        yield json.dumps(chunk_line) + "\n\n"
+                    chunk_response = ModelResponse(
+                        id=data['id'] if 'id' in data else None,
+                        choices=chunk_choices,
+                        context=chunk_context,
+                        created=int(time.time()),
+                        model=model,
+                        usage=chunk_usage if chunk_usage else None,
+                        stream=True
+                    )
+                    index += 1
+                    yield chunk_response
 
     def create_model_response_wrapper(self, result):
         response_dict = result.json()
+        print(response_dict)
         choices = []
         context = []
         message = Message(
