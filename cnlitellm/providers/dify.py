@@ -55,6 +55,7 @@ class DifyAIProvider(BaseProvider):
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
         chunk_choices = []
         chunk_context = []
+        chunk_usage = Usage()
         index = 0
         for line in response.iter_lines():
             if line:
@@ -80,7 +81,6 @@ class DifyAIProvider(BaseProvider):
                         metadata = data["metadata"]
                         if "usage" in metadata:
                             usage_info = metadata["usage"]
-                            chunk_usage = Usage()
                             if "prompt_tokens" in usage_info:
                                 chunk_usage.prompt_tokens = usage_info["prompt_tokens"]
                             if "completion_tokens" in usage_info:
@@ -95,14 +95,13 @@ class DifyAIProvider(BaseProvider):
                                     "content": resource["content"],
                                     "score": resource["score"],    
                                 })
-
                     chunk_response = ModelResponse(
                         id="hello",
                         choices=chunk_choices,
                         context=chunk_context,
                         created=int(time.time()),
                         model=model,
-                        usage=chunk_usage if chunk_usage else None,
+                        usage=chunk_usage,
                         stream=True
                     )
                     index += 1
