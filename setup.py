@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='cnlitellm',
-    version='0.2.3',
+    version='0.2.4',
     packages=find_packages(),
     license='MIT',
     description='A Python library for unified access to Chinese domestic large language models.',

@@ -44,12 +44,12 @@ class FastGPTProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
-        chunk_choices = []
-        chunk_context = []
         index = 0
         # 解析stream返回信息并生成OpenAI兼容格式
         for line in response.iter_lines():
             if line:
+                chunk_choices = []
+                chunk_context = []
                 if line.startswith(b"data:"):
                     new_line = line.decode("utf-8").replace("data: ", "")
                     if new_line == "[DONE]":
@@ -90,17 +90,17 @@ class FastGPTProvider(BaseProvider):
                                             "content": content,
                                         }    
                                     )
-                    chunk_response = ModelResponse(
-                        id=data['id'] if 'id' in data else None,
-                        choices=chunk_choices,
-                        context=chunk_context,
-                        created=int(time.time()),
-                        model=model,
-                        usage=chunk_usage if chunk_usage else None,
-                        stream=True
-                    )
-                    index += 1
-                    yield chunk_response
+                chunk_response = ModelResponse(
+                    id=data['id'] if 'id' in data else None,
+                    choices=chunk_choices,
+                    context=chunk_context,
+                    created=int(time.time()),
+                    model=model,
+                    usage=chunk_usage if chunk_usage else None,
+                    stream=True
+                )
+                index += 1
+                yield chunk_response
 
     def create_model_response_wrapper(self, result):
         response_dict = result.json()

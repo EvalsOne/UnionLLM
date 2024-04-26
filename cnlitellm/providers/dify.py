@@ -53,12 +53,13 @@ class DifyAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
-        chunk_choices = []
-        chunk_context = []
+
         chunk_usage = Usage()
         index = 0
         for line in response.iter_lines():
             if line:
+                chunk_choices = []
+                chunk_context = []
                 # judge if the new_line begins with "data:"
                 if line.startswith(b"data:"):
                     new_line = line.decode("utf-8").replace("data: ", "")
