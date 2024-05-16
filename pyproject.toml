@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "unionllm"
-version = "0.1.0"
+version = "0.1.2"
 description = "A Python library for unified access to all kinds of large language models."
 license = "MIT"
 homepage = "https://github.com/EvalsOne/UnionLLM"
@@ -15,5 +15,5 @@ requests = "*"
 tenacity = "*"
 websocket-client = "*"
 zhipuai = "*"
-pytest
-litellm
+pytest = "*"
+litellm = "*"
