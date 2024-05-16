@@ -1,14 +1,14 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='cnlitellm',
-    version='0.2.4',
+    name='unionllm',
+    version='0.1.1',
     packages=find_packages(),
     license='MIT',
     description='A Python library for unified access to Chinese domestic large language models.',
     author='everfly',
     author_email='tagriver@gmail.com',
-    url='https://github.com/EvalsOne/CNLiteLLM',
+    url='https://github.com/EvalsOne/UnionLLM',
     install_requires=[
         'openai',
         'pydantic',

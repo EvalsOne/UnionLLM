@@ -1,53 +1,38 @@
 import sys
 import os
-import unittest
 import json
-import dashscope
+import pytest
+from dotenv import load_dotenv
+load_dotenv()
 
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.providers.qwen import QwenAIProvider
+from unionllm.providers.qwen import QwenAIProvider, QwenOpenAIError
+class TestQwenAIProvider:
+    @pytest.fixture(autouse=True)
+    def setup_provider(self):
+        # 从环境变量中导入API密钥
+        self.provider = QwenAIProvider(api_key=os.getenv("DASHSCOPE_API_KEY"))
 
+    def test_completion_stream(self):
+        # Test non-stream completion
+        model = "qwen-plus"
+        messages = [{"content": "introduce yourself briefly.", "role": "user"}]        
+        try:
+            response = self.provider.completion(model=model, messages=messages, stream=True)
+            for chunk in response:
+                print(chunk["choices"][0]["delta"]["content"])
+        except Exception as e:
+            pytest.fail(f"Error occurred: {e}")
+        
 
-class TestQwenAIProvider(unittest.TestCase):
-    def setUp(self):
-        self.provider = QwenAIProvider(api_key="sk-45ad8752a48d47ffaf86f5b000eff589")
-
-    def test_completion(self):
-        model = "qwen-turbo"
-        messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-        response = self.provider.completion(model=model, messages=messages)
-        print("response: ", response)
-        self.assertIsNotNone(response)
-
-    # def test_completion(self):
-    #     model = "qwen-turbo"
-    #     messages = [{"content": "你好，今天天气怎么样？", "role": "user"}]
-    #     response = self.provider.completion(model=model, messages=messages, stream=True)
-    #     for chunk in response:
-    #         new_chunk = json.loads(chunk)
-    #         delta = new_chunk["choices"][0]["delta"]
-    #         line = {
-    #             "choices": [
-    #                 {
-    #                     "delta": {
-    #                         "role": delta["role"],
-    #                         "content": delta["content"],
-    #                     }
-    #                 }
-    #             ]
-    #         }
-    #         if "usage" in new_chunk:
-    #             usage_info = new_chunk["usage"]
-    #             line["usage"] = {
-    #                 "prompt_tokens": usage_info["prompt_tokens"],
-    #                 "completion_tokens": usage_info["completion_tokens"],
-    #                 "total_tokens": usage_info["total_tokens"],
-    #             }
-    #         print("line:", line)
-    #     self.assertIsNotNone(response)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_completion_non_stream(self):
+        # 定义模型和消息
+        model = "qwen-plus"
+        messages = [{"content": "introduce yourself briefly.", "role": "user"}]
+        try:
+            response = self.provider.completion(model=model, messages=messages, stream=False)
+            print(response)
+        except Exception as e:
+            pytest.fail(f"Error occurred: {e}")

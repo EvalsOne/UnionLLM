@@ -1,9 +1,9 @@
 [tool.poetry]
-name = "cnlitellm"
-version = "0.1"
+name = "unionllm"
+version = "0.1.0"
 description = "A Python library for unified access to Chinese domestic large language models."
 license = "MIT"
-homepage = "https://github.com/EvalsOne/CNLiteLLM"
+homepage = "https://github.com/EvalsOne/UnionLLM"
 authors = ["everfly <tagriver@gmail.com>"]
 
 [tool.poetry.dependencies]

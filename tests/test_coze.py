@@ -1,33 +1,40 @@
 import sys
 import os
-import unittest
 import json
+import pytest
+from dotenv import load_dotenv
+load_dotenv()
 
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from cnlitellm.providers.coze import CozeAIProvider, CozeAIError
+from unionllm.providers.coze import CozeAIProvider, CozeAIError
 
+class TestCozeAIProvider:
+    @pytest.fixture(autouse=True)
+    def setup_provider(self):
+        # 从环境变量中导入API密钥
+        self.provider = CozeAIProvider(api_key=os.getenv("COZE_API_KEY"), bot_id=os.getenv("COZE_BOT_ID"))
 
-class TestFastGPTProvider(unittest.TestCase):
-    def setUp(self):
-        # 请将'your_api_key'替换为您的Zhipu AI API密钥
-        self.provider = CozeAIProvider(
-            api_key="pat_hodyfcRog0CfCAfEMtKAueI1I8yD2tDuDBSrvSRoXhKm1xLCw0HDiePtEVgRFHzt"
-        )
+    def test_completion_stream(self):
+        # Test non-stream completion
+        model = "coze"
+        messages = [{"content": "瑞文智商测试", "role": "user"}]        
+        try:
+            response = self.provider.completion(model=model, messages=messages, stream=True)
+            for chunk in response:
+                if chunk.choices:
+                    print(chunk.choices[0].delta.content)
+        except Exception as e:
+            pytest.fail(f"Error occurred: {e}")
+        
 
-    def test_completion_non_stream_failure(self):
-
+    def test_completion_non_stream(self):
         # 定义模型和消息
-        model = "7355829428481769477"
-        messages = [{"content": "智商测试", "role": "user"}]
-
-        response = self.provider.completion(model=model, messages=messages, stream=False, details=True)
-
-        print("response: ", response)
-
-        # 检查捕获的异常是否符合预期
-        self.assertIsNotNone(response)
-
-if __name__ == "__main__":
-    unittest.main()
+        model = "coze"
+        messages = [{"content": "瑞文智商测试", "role": "user"}]
+        try:
+            response = self.provider.completion(model=model, messages=messages, stream=False)
+            print(response)
+        except Exception as e:
+            pytest.fail(f"Error occurred: {e}")
