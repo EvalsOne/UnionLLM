@@ -16,6 +16,8 @@ setup(
         'tenacity',
         'dashscope',
         'websocket_client',
-        'requests'
+        'requests',
+        'pytest',
+        'litellm'
     ],
 )
