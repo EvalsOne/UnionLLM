@@ -65,7 +65,7 @@ class UnionLLM:
         if provider in ['azure', 'sagemaker', 'bedrock', 'vertex_ai', 'palm', 'gemini', 'mistral', 'cloudflare', 'huggingface', 'replicate', 'together_ai', 'openrouter', 'baseten', 'nlp_cloud', 'petals', 'ollama', 'perplexity', 'groq', 'anyscale', 'watsonx', 'voyage', 'xinference']:
             # provider name should be added to the model name
             return True, 1
-        elif provider in ['openai', 'claude', 'cohere', 'ai21', 'luminous']:
+        elif provider in ['openai', 'anthropic', 'cohere', 'ai21', 'deepseek', 'deepinfra', 'ai21', 'alpha_alpha']:
             # provider name should not be added to the model name
             return True, 2
         else:
