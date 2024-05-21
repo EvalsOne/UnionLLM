@@ -1,4 +1,7 @@
 import logging
+import asyncio
+from functools import partial
+
 from typing import Any, List
 from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm
 from .exceptions import ProviderError
@@ -45,6 +48,8 @@ class UnionLLM:
         else:
             self.provider_instance = litellm.LiteLLMProvider(**kwargs)
 
+
+
     def completion(self, model: str, messages: List[str], **kwargs) -> Any:
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
@@ -60,6 +65,24 @@ class UnionLLM:
         else:
             return self.provider_instance.completion(model, messages, **kwargs)
         
+    async def acompletion(self, model: str, messages: List[str], **kwargs) -> Any:
+        loop = asyncio.get_event_loop()
+        if not self.provider_instance:
+            raise ProviderError(f"Provider '{self.provider}' is not initialized.")
+        
+        if self.litellm_call_type:
+            if self.litellm_call_type == 1:
+                if not model.startswith(self.provider + "/"):
+                    model = f"{self.provider}/{model}"
+                func = partial(self.provider_instance.completion, model, messages, **kwargs)
+                return await loop.run_in_executor(None, func)
+            elif self.litellm_call_type == 2:
+                func = partial(self.provider_instance.completion, model, messages, **kwargs)
+                return await loop.run_in_executor(None, func)
+        else:
+            func = partial(self.provider_instance.completion, model, messages, **kwargs)
+            return await loop.run_in_executor(None, func)
+
     def check_litellm_providers(self, provider: str) -> bool:
         # Judge whether the provider is supported by LiteLLM, and if provider name should be added to the model name
         if provider in ['azure', 'sagemaker', 'bedrock', 'vertex_ai', 'palm', 'gemini', 'mistral', 'cloudflare', 'huggingface', 'replicate', 'together_ai', 'openrouter', 'baseten', 'nlp_cloud', 'petals', 'ollama', 'perplexity', 'groq', 'anyscale', 'watsonx', 'voyage', 'xinference']:
