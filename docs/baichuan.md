@@ -13,7 +13,7 @@ os.environ["BAICHUAN_API_KEY"] = "your-baichuan-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="baichuan",
     model="Baichuan2-Turbo", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -29,7 +29,7 @@ from unionllm import unionchat
 os.environ["COHERE_API_KEY"] = "cohere key"
 
 # model call
-response = completion(
+response = unionchat(
     provider="baichuan",
     model="Baichuan2-Turbo", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -42,7 +42,7 @@ print(response)
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="baichuan",
     model="Baichuan2-Turbo", 
     api_key="your-baichuan-api-key",

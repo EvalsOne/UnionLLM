@@ -15,7 +15,7 @@ os.environ["XUNFEI_API_SECRET"] = "your-api-secret"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="xunfei",
     model="generalv3.5", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -30,7 +30,7 @@ response = completion(
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="xunfei",
     model="generalv3.5", 
     app_id="your-app-id",

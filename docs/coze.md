@@ -14,7 +14,7 @@ os.environ["COZE_BOT_ID"] = "your-coze-bot-id"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="coze",
     model="coze", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -29,7 +29,7 @@ print(response)
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="tiangong",
     model="SkyChat-MegaVerse", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -43,7 +43,7 @@ for chunk in response:
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="coze",
     model="coze", 
     api_key="your-coze-api-key",

@@ -43,7 +43,7 @@ os.environ["MISTRAL_API_KEY"] = "your-mistral-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="mistral",
     model="mistral-tiny", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -58,7 +58,7 @@ print(response)
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="mistral",
     model="mistral-tiny", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -72,7 +72,7 @@ for chunk in response:
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="mistral",
     model="mistral-tiny", 
     app_key="your-mistral-api-key",
@@ -86,7 +86,7 @@ response = completion(
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     model="mistral/mistral-tiny", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )

@@ -13,7 +13,7 @@ os.environ["ZHIPU_API_KEY"] = "your-zhipu-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="zhipuai",
     model="glm-4", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -29,7 +29,7 @@ from unionllm import unionchat
 os.environ["COHERE_API_KEY"] = "cohere key"
 
 # model call
-response = completion(
+response = unionchat(
     provider="zhipuai",
     model="glm-4", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -42,7 +42,7 @@ print(response)
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="zhipuai",
     model="glm-4", 
     api_key="your-zhipu-api-key",

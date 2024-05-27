@@ -13,7 +13,7 @@ os.environ["DIFY_API_KEY"] = "your-dify-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="dify",
     model="dify", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -28,7 +28,7 @@ print(response)
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="dify",
     model="dify", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -42,7 +42,7 @@ for chunk in response:
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="dify",
     model="dify", 
     api_key="your-dify-api-key",

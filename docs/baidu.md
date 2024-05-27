@@ -14,7 +14,7 @@ os.environ["ERNIE_CLIENT_SECRET"] = "your-client-secret"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="wenxin",
     model="completions_pro", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -27,7 +27,7 @@ response = completion(
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="wenxin",
     model="completions_pro", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -40,7 +40,7 @@ print(response)
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="wenxin",
     model="completions_pro", 
     client_id="your-client-id",

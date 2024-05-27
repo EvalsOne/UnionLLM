@@ -13,7 +13,7 @@ os.environ["FASTGPT_API_KEY"] = "your-fastgpt-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="fastgpt",
     model="fastgpt", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -28,7 +28,7 @@ print(response)
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="fastgpt",
     model="fastgpt", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -42,7 +42,7 @@ for chunk in response:
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="fastgpt",
     model="fastgpt", 
     api_key="your-fastgpt-api-key",

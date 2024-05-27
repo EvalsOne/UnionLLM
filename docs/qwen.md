@@ -13,7 +13,7 @@ os.environ["DASHSCOPE_API_KEY"] = "your-dashscope-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="qwen",
     model="qwen-turbo", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -26,7 +26,7 @@ response = completion(
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="qwen",
     model="qwen-turbo", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -39,7 +39,7 @@ print(response)
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     apk_key="your-dashscope-api-key",
     provider="qwen",
     model="qwen-turbo", 

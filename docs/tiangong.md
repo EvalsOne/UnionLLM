@@ -14,7 +14,7 @@ os.environ["TIANGONG_APP_SECRET"] = "your-tiangong-app-secret"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="tiangong",
     model="SkyChat-MegaVerse", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -27,7 +27,7 @@ response = completion(
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="tiangong",
     model="SkyChat-MegaVerse", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -40,7 +40,7 @@ print(response)
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     provider="tiangong",
     model="SkyChat-MegaVerse", 
     app_key="your-baichuan-api-key",

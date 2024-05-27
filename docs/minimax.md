@@ -13,7 +13,7 @@ os.environ["MINIMAX_API_KEY"] = "your-minimax-api-key"
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="minimax",
     model="abab5.5-chat", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -26,7 +26,7 @@ response = completion(
 from unionllm import unionchat
 
 # model call
-response = completion(
+response = unionchat(
     provider="minimax",
     model="abab5.5-chat", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
@@ -39,7 +39,7 @@ print(response)
 
 ```python
 # model call
-response = completion(
+response = unionchat(
     apk_key="your-minimax-api-key",
     provider="minimax",
     model="abab5.5-chat", 
