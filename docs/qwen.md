@@ -7,7 +7,7 @@ import os
 os.environ["DASHSCOPE_API_KEY"] = "your-dashscope-api-key"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -20,7 +20,7 @@ response = completion(
 )
 ```
 
-## 流式调用
+### 流式调用
 
 ```python
 from unionllm import unionchat
@@ -48,4 +48,12 @@ response = completion(
 
 for chunk in response:
     print(chunk)
+```
+
+## 支持模型
+支持通义千问的所有模型
+
+参考文档：
+- [API调用](https://help.aliyun.com/zh/dashscope/developer-reference/api-details)
+- [模型价格](https://help.aliyun.com/zh/dashscope/developer-reference/tongyi-thousand-questions-metering-and-billing)
 ```

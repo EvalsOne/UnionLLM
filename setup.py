@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='unionllm',
-    version='0.1.3',
+    version='0.1.4',
     packages=find_packages(),
     license='MIT',
     description='A Python library for unified access to Chinese domestic large language models.',
@@ -17,7 +17,6 @@ setup(
         'dashscope',
         'websocket_client',
         'requests',
-        'pytest',
         'litellm'
     ],
 )

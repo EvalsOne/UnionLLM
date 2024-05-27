@@ -1,13 +1,13 @@
 # 月之暗面 Moonshot
 
-## 设置API KEYS
+## 通过环境变量设置调用参数
 
 ```python
 import os 
 os.environ["MOONSHOT_API_KEY"] = "your-moonshot-api-key"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -20,7 +20,7 @@ response = completion(
 )
 ```
 
-## 流式调用
+### 流式调用
 
 ```python
 from unionllm import unionchat
@@ -51,4 +51,12 @@ response = completion(
 
 for chunk in response:
     print(chunk)
+```
+
+## 支持模型
+支持Moonshot的所有模型
+
+参考文档：
+- [API调用](https://platform.moonshot.cn/docs/api-reference)
+- [模型价格](https://platform.moonshot.cn/docs/pricing)
 ```

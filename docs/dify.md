@@ -45,7 +45,11 @@ for chunk in response:
 response = completion(
     provider="dify",
     model="dify", 
-    app_key="your-dify-api-key",
+    api_key="your-dify-api-key",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
 ```
+
+## 注意事项
+- model参数没有实际作用，可以传入任何字符串
+- Dify的API key可以在每个Bot的设置页面找到

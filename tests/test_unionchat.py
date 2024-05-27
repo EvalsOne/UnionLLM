@@ -8,8 +8,8 @@ load_dotenv()
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from unionllm.exceptions import ProviderError
-from unionllm import unionchat  # 确保引入你的模块和函数
-from unionllm.utils import ModelResponse, Message, Choices, Usage, Context  # 确保引入ModelResponse
+from unionllm import unionchat
+from unionllm.utils import ModelResponse, Message, Choices, Usage, Context
 
 common_messages = [{"content": "你的开发者是谁？", "role": "user"}]
 
@@ -27,12 +27,12 @@ common_messages = [{"content": "你的开发者是谁？", "role": "user"}]
     ("coze", "coze", common_messages, None, False),
     ("dify", "dify", common_messages, None, False),
     ("fastgpt", "fastgpt", common_messages, None, False),    
-    # {"ollama", "ollama/llama3", common_messages, None, False}
+    {"ollama", "ollama/llama3", common_messages, None, False}
     ("mistral", "mistral-large-latest", common_messages, None, False),
     ("cohere", "command-r", common_messages, None, False),
     ("groq", "groq/mixtral-8x7b-32768", common_messages, None, False),
     ("bedrock", "ai21.j2-ultra-v1", common_messages, None, False),
-    # ("", "groq/mixtral-8x7b-32768", common_messages, None, False), #no provider case
+    ("", "groq/mixtral-8x7b-32768", common_messages, None, False), #no provider case
     ("nonexistent", "model", common_messages, ProviderError, False),
     # stream mode
     ("azure", "azure/gpt-35-turbo", common_messages, None, True),
@@ -44,11 +44,10 @@ common_messages = [{"content": "你的开发者是谁？", "role": "user"}]
     ("moonshot", "moonshot-v1-8k", common_messages, None, True),
     ("minimax", "abab5.5-chat", common_messages, None, True),
     ("baichuan", "Baichuan2-Turbo", common_messages, None, True),
-    # ("xunfei", "generalv3", common_messages, None, True),
     ("coze", "coze", common_messages, None, True),
     ("dify", "dify", common_messages, None, True),
     ("fastgpt", "fastgpt", common_messages, None, True),    
-    # {"ollama", "ollama/llama3", common_messages, None, False}
+    {"ollama", "ollama/llama3", common_messages, None, False}
     ("mistral", "mistral-large-latest", common_messages, None, True),
     ("cohere", "command-r", common_messages, None, True),
     ("groq", "groq/mixtral-8x7b-32768", common_messages, None, True),

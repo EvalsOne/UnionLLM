@@ -53,7 +53,6 @@ class UnionLLM:
     def completion(self, model: str, messages: List[str], **kwargs) -> Any:
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
-        
         if self.litellm_call_type:
             if self.litellm_call_type == 1:
                 # Jugde whether the model starts with self.provider, if not, add it

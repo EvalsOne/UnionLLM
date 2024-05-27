@@ -46,14 +46,16 @@ from unionllm import unionchat
 unionchat(provider="openai", model="gpt-4o", messages=[{"content": "你的开发者是谁？", "role": "user"}], stream=True)
 ```
 
-以下是stream=True的调用方式的增量格式示例：
+以下是stream=False的调用方式的返回格式示例：
 ```python
 ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', index=0, message=Message(content='我是人工智能助手。', role='assistant'))], created=1715570856, model=model, object='chat.completion', system_fingerprint=None, usage=Usage(prompt_tokens=9, completion_tokens=27, total_tokens=36))
 ```
 
-以下是stream=False的调用方式的返回格式示例：
+以下是stream=True的调用方式的chunk增量格式示例：
 ```python
+......
 ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', index=0, message=Message(content='我是人工智能助手。', role='assistant'))], created=1715570856, model=model, object='chat.completion', system_fingerprint=None, usage=Usage(prompt_tokens=9, completion_tokens=27, total_tokens=36))
+......
 ```
 
 UnionLLM的返回结果格式与LiteLLM一致且与OpenAI一致，并在此基础上扩展了Context信息的返回，以实现发起知识库检索的RAG调用时返回相关背景知识。

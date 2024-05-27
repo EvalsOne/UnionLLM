@@ -1,6 +1,6 @@
 # 昆仑天工
 
-## 设置API KEYS
+## 通过环境变量设置调用参数
 
 ```
 import os 
@@ -8,7 +8,7 @@ os.environ["TIANGONG_APP_KEY"] = "your-tiangong-app-key"
 os.environ["TIANGONG_APP_SECRET"] = "your-tiangong-app-secret"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -21,7 +21,7 @@ response = completion(
 )
 ```
 
-## 流式调用
+### 流式调用
 
 ```python
 from unionllm import unionchat
@@ -36,7 +36,7 @@ response = completion(
 print(response)
 ```
 
-## 直接传入API_Key调用
+## 接口直接传入鉴权参数调用
 
 ```python
 # model call
@@ -50,4 +50,12 @@ response = completion(
 
 for chunk in response:
     print(chunk)
+```
+
+## 支持模型
+支持天工的所有文本模型
+
+参考文档：
+- [API调用](https://model-platform.tiangong.cn/api-reference)
+- [模型价格](https://model-platform.tiangong.cn/pricing)
 ```

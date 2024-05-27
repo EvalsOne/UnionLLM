@@ -1,13 +1,13 @@
 # 智谱AI
 
-## 设置API KEYS
+### 通过环境变量设置API KEY
 
 ```
 import os 
 os.environ["ZHIPU_API_KEY"] = "your-zhipu-api-key"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -20,7 +20,7 @@ response = completion(
 )
 ```
 
-## 流式调用
+### 流式调用
 
 ```python
 from unionllm import unionchat
@@ -51,4 +51,13 @@ response = completion(
 
 for chunk in response:
     print(chunk)
+```
+
+
+## 支持模型
+支持天工的所有文本模型
+
+参考文档：
+- [API调用](https://open.bigmodel.cn/dev/api)
+- [模型价格](https://open.bigmodel.cn/pricing)
 ```

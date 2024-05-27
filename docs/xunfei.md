@@ -9,7 +9,7 @@ os.environ["XUNFEI_API_KEY"] = "your-api-key"
 os.environ["XUNFEI_API_SECRET"] = "your-api-secret"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -22,7 +22,7 @@ response = completion(
 )
 ```
 
-## 流式调用
+### 流式调用
 
 暂不支持
 
@@ -41,4 +41,18 @@ response = completion(
 
 for chunk in response:
     print(chunk)
+```
+
+## 支持模型
+
+|模型名称|传入model参数名称|
+|---|---|
+|Spark3.5 Max|generalv3.5|
+|Spark Pro|generalv3|
+|Spark V2.0|generalv2|
+|Spark Lite|general|
+
+## 参考文档：
+- [API调用](https://www.xfyun.cn/doc/spark/Web.html)
+- [模型价格](https://xinghuo.xfyun.cn/sparkapi)
 ```

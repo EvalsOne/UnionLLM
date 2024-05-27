@@ -21,11 +21,12 @@ class LiteLLMProvider(BaseProvider):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias"
+            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
-                kwargs.pop(key)
+                # kwargs.pop(key) # This line is commented out to avoid removing the key from the kwargs
+                pass
         return kwargs
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
@@ -39,13 +40,15 @@ class LiteLLMProvider(BaseProvider):
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
+            if 'provider' in kwargs:
+                print("Litellm provider", kwargs['provider'])
+                kwargs.pop('provider')
             if model is None or messages is None:
                 raise LiteLLMError(
                     status_code=422, message=f"Missing model or messages"
                 )
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
-
             if stream:
                 return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             else:

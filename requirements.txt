@@ -6,5 +6,4 @@ setuptools
 tenacity
 websocket_client
 zhipuai
-pytest
-unionllm
+litellm

@@ -8,7 +8,7 @@ os.environ["COZE_API_KEY"] = "your-coze-api-key"
 os.environ["COZE_BOT_ID"] = "your-coze-bot-id"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -23,7 +23,7 @@ response = completion(
 print(response)
 ```
 
-## 流式调用
+### 流式调用
 
 ```python
 from unionllm import unionchat
@@ -46,8 +46,12 @@ for chunk in response:
 response = completion(
     provider="coze",
     model="coze", 
-    app_key="your-coze-api-key",
-    app_secret="your-coze-bot-id",
+    api_key="your-coze-api-key",
+    bot_id="your-coze-bot-id",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
 ```
+
+## 注意事项
+- model参数没有实际作用，可以传入任何字符串
+- Coze API的参考文档：https://www.coze.com/docs/developer_guides/coze_api_overview?_lang=zh

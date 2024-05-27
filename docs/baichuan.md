@@ -1,13 +1,13 @@
 # 百川AI
 
-## 设置API KEYS
+## 通过环境变量进行鉴权
 
 ```
 import os 
 os.environ["BAICHUAN_API_KEY"] = "your-baichuan-api-key"
 ```
 
-## 非流式调用
+### 非流式调用
 
 ```python
 from unionllm import unionchat
@@ -20,7 +20,7 @@ response = completion(
 )
 ```
 
-## 流式调用
+### 流式调用
 
 ```python
 from unionllm import unionchat
@@ -38,7 +38,7 @@ response = completion(
 print(response)
 ```
 
-## 直接传入API_Key调用
+## 直接传入鉴权参数调用
 
 ```python
 # model call
@@ -51,4 +51,12 @@ response = completion(
 
 for chunk in response:
     print(chunk)
+```
+
+## 支持模型
+支持百川AI的所有模型
+
+参考文档：
+- [百川AI文档](https://platform.baichuan-ai.com/docs/api)
+- [模型价格](https://platform.baichuan-ai.com/price)
 ```
