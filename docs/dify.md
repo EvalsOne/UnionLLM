@@ -51,5 +51,5 @@ response = completion(
 ```
 
 ## 注意事项
-- model参数没有实际作用，可以传入任何字符串
+- model参数没有实际作用，可以传入任意字符串
 - Dify的API key可以在每个Bot的设置页面找到

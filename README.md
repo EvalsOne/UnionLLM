@@ -58,7 +58,7 @@ ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', i
 ......
 ```
 
-UnionLLM的返回结果格式与LiteLLM一致且与OpenAI一致，并在此基础上扩展了Context信息的返回，以实现发起知识库检索的RAG调用时返回相关背景知识。
+UnionLLM的返回结果格式与LiteLLM一致且与OpenAI一致，并在此基础上扩展了Context信息的返回，以实现发起知识库检索的RAG调用时返回相关背景知识。(由于Coze, FastGPT和Dify的接口中返回背景信息的方式和格式经常改变，目前版本可能无法成功获取Context信息)
 
 以下是包含知识库检索背景信息的返回结果示例 (非流式调用)：
 ```python

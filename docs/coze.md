@@ -53,5 +53,5 @@ response = completion(
 ```
 
 ## 注意事项
-- model参数没有实际作用，可以传入任何字符串
+- model参数没有实际作用，可以传入任意字符串
 - Coze API的参考文档：https://www.coze.com/docs/developer_guides/coze_api_overview?_lang=zh

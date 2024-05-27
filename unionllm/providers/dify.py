@@ -183,6 +183,8 @@ class DifyAIProvider(BaseProvider):
                     "Content-Type": "application/json",
                 }
                 result = requests.post(self.endpoint_url, headers=headers, data=payload)
+                print("Dify response")
+                print(result.json())
                 return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):
