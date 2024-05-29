@@ -16,8 +16,11 @@ from unionllm import unionchat
 response = unionchat(
     provider="baichuan",
     model="Baichuan2-Turbo", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
+
+print(response)
 ```
 
 ### 流式调用
@@ -32,10 +35,12 @@ os.environ["COHERE_API_KEY"] = "cohere key"
 response = unionchat(
     provider="baichuan",
     model="Baichuan2-Turbo", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
-print(response)
+for chunk in response:
+    print(chunk)
 ```
 
 ## 直接传入鉴权参数调用
@@ -46,11 +51,8 @@ response = unionchat(
     provider="baichuan",
     model="Baichuan2-Turbo", 
     api_key="your-baichuan-api-key",
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
 )
-
-for chunk in response:
-    print(chunk)
 ```
 
 ## 支持模型

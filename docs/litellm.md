@@ -12,7 +12,7 @@ import litellm
 response = litellm.completion(
     model="bedrock/anthropic.claude-instant-v1",
     model_id="provisioned-model-arn",
-    messages=[{"content": "Hello, how are you?", "role": "user"}]
+    messages=[{"content": "Hello, how are you?", "role": "user"}],
 )
 ```
 
@@ -22,7 +22,7 @@ from unionllm import unionchat
 response = unionchat(
     provider="bedrock",
     model="anthropic.claude-instant-v1",
-    messages=[{"content": "Hello, how are you?", "role": "user"}]
+    messages=[{"content": "Hello, how are you?", "role": "user"}],
 )
 ```
 
@@ -46,7 +46,8 @@ from unionllm import unionchat
 response = unionchat(
     provider="mistral",
     model="mistral-tiny", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
 
 print(response)
@@ -61,7 +62,8 @@ from unionllm import unionchat
 response = unionchat(
     provider="mistral",
     model="mistral-tiny", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
 for chunk in response:

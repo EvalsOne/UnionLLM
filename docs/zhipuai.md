@@ -16,8 +16,11 @@ from unionllm import unionchat
 response = unionchat(
     provider="zhipuai",
     model="glm-4", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
+
+print(response)
 ```
 
 ### 流式调用
@@ -32,10 +35,12 @@ os.environ["COHERE_API_KEY"] = "cohere key"
 response = unionchat(
     provider="zhipuai",
     model="glm-4", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
-print(response)
+for chunk in response:
+    print(chunk)
 ```
 
 ## 直接传入API_Key调用
@@ -48,9 +53,6 @@ response = unionchat(
     api_key="your-zhipu-api-key",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
-
-for chunk in response:
-    print(chunk)
 ```
 
 

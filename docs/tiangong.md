@@ -17,8 +17,11 @@ from unionllm import unionchat
 response = unionchat(
     provider="tiangong",
     model="SkyChat-MegaVerse", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
+
+print(response)
 ```
 
 ### 流式调用
@@ -30,10 +33,12 @@ from unionllm import unionchat
 response = unionchat(
     provider="tiangong",
     model="SkyChat-MegaVerse", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
-print(response)
+for chunk in response:
+    print(chunk)
 ```
 
 ## 接口直接传入鉴权参数调用
@@ -47,9 +52,6 @@ response = unionchat(
     app_secret="your-baichuan-api-secret",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
-
-for chunk in response:
-    print(chunk)
 ```
 
 ## 支持模型

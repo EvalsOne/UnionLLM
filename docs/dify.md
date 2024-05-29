@@ -16,7 +16,8 @@ from unionllm import unionchat
 response = unionchat(
     provider="dify",
     model="dify", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
 
 print(response)
@@ -31,7 +32,8 @@ from unionllm import unionchat
 response = unionchat(
     provider="dify",
     model="dify", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
 for chunk in response:

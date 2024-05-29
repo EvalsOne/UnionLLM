@@ -17,8 +17,11 @@ from unionllm import unionchat
 response = unionchat(
     provider="wenxin",
     model="completions_pro", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
+
+print(response)
 ```
 
 ### 流式调用
@@ -30,10 +33,12 @@ from unionllm import unionchat
 response = unionchat(
     provider="wenxin",
     model="completions_pro", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
-print(response)
+for chunk in response:
+    print(chunk)
 ```
 
 ## 在接口中直接传入鉴权参数调用
@@ -47,9 +52,6 @@ response = unionchat(
     client_secret="your-client-secret",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
-
-for chunk in response:
-    print(chunk)
 ```
 
 ## 支持模型
@@ -60,7 +62,7 @@ https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/completions_pr
 
 那么，需要传入的模型名称是`completions_pro`
 
-参考文档：
+## 参考文档：
 - [API文档](https://cloud.baidu.com/doc/WENXINWORKSHOP/s/clntwmv7t)
 - [模型价格](https://platform.baichuan-ai.com/price)
 ```

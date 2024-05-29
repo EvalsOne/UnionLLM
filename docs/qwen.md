@@ -16,8 +16,11 @@ from unionllm import unionchat
 response = unionchat(
     provider="qwen",
     model="qwen-turbo", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
+
+print(response)
 ```
 
 ### 流式调用
@@ -29,10 +32,12 @@ from unionllm import unionchat
 response = unionchat(
     provider="qwen",
     model="qwen-turbo", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=True
 )
 
-print(response)
+for chunk in response:
+    print(chunk)
 ```
 
 ## 直接传入API_Key调用
@@ -45,9 +50,6 @@ response = unionchat(
     model="qwen-turbo", 
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
-
-for chunk in response:
-    print(chunk)
 ```
 
 ## 支持模型

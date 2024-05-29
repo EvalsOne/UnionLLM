@@ -18,8 +18,11 @@ from unionllm import unionchat
 response = unionchat(
     provider="xunfei",
     model="generalv3.5", 
-    messages = [{ "content": "Hello, how are you?","role": "user"}]
+    messages = [{ "content": "Hello, how are you?","role": "user"}],
+    stream=False
 )
+
+print(response)
 ```
 
 ### 流式调用
@@ -38,9 +41,6 @@ response = unionchat(
     api_secret="your-api-secret",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
-
-for chunk in response:
-    print(chunk)
 ```
 
 ## 支持模型
