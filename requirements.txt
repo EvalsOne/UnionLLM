@@ -1,0 +1,9 @@
+dashscope
+openai
+pydantic
+Requests
+setuptools
+tenacity
+websocket_client
+zhipuai
+litellm
