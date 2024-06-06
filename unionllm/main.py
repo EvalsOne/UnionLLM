@@ -66,8 +66,6 @@ class UnionLLM:
                 return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 2:
                 return self.provider_instance.completion(model, messages, **kwargs)
-            elif self.litellm_call_type == 3:
-                return self.provider_instance.completion(model, messages, **kwargs)
         else:
             return self.provider_instance.completion(model, messages, **kwargs)
         

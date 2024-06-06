@@ -48,6 +48,12 @@ from unionllm import unionchat
 unionchat(provider="openai", model="gpt-4o", messages=[{"content": "你的开发者是谁？", "role": "user"}], stream=True)
 ```
 
+通过UnionLLM调用OpenAI proxy示例如下(借助LiteLLM)：
+```python
+from unionllm import unionchat
+unionchat(custom_llm_provider="openai", model="gpt-4o", api_base="https://your_custom_proxy_domain/v1" messages=[{"content": "你的开发者是谁？", "role": "user"}], stream=True)
+```
+
 以下是stream=False的调用方式的返回格式示例：
 ```python
 ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', index=0, message=Message(content='我是人工智能助手。', role='assistant'))], created=1715570856, model=model, object='chat.completion', system_fingerprint=None, usage=Usage(prompt_tokens=9, completion_tokens=27, total_tokens=36))
