@@ -28,9 +28,6 @@ print(response)
 ```python
 from unionllm import unionchat
 
-## set ENV variables
-os.environ["COHERE_API_KEY"] = "cohere key"
-
 # model call
 response = unionchat(
     provider="moonshot",

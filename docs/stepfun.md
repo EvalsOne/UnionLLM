@@ -1,10 +1,10 @@
-# 智谱AI
+# 阶跃星辰
 
-### 通过环境变量设置API KEY
+## 通过环境变量设置调用参数
 
-```
+```python
 import os 
-os.environ["ZHIPU_API_KEY"] = "your-zhipu-api-key"
+os.environ["STEPFUN_API_KEY"] = "your-stepfun-api-key"
 ```
 
 ### 非流式调用
@@ -14,8 +14,8 @@ from unionllm import unionchat
 
 # model call
 response = unionchat(
-    provider="zhipuai",
-    model="glm-4", 
+    provider="stepfun",
+    model="step-1-8k", 
     messages = [{ "content": "Hello, how are you?","role": "user"}],
     stream=False
 )
@@ -30,8 +30,8 @@ from unionllm import unionchat
 
 # model call
 response = unionchat(
-    provider="zhipuai",
-    model="glm-4", 
+    provider="stepfun",
+    model="step-1-8k",
     messages = [{ "content": "Hello, how are you?","role": "user"}],
     stream=True
 )
@@ -45,18 +45,16 @@ for chunk in response:
 ```python
 # model call
 response = unionchat(
-    provider="zhipuai",
-    model="glm-4", 
-    api_key="your-zhipu-api-key",
+    provider="stepfun",
+    model="step-1-8k",
+    api_key="your-stepfun-api-key",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
 ```
 
-
 ## 支持模型
-支持天工的所有文本模型
+支持的所有模型
 
 参考文档：
-- [API调用](https://open.bigmodel.cn/dev/api)
-- [模型价格](https://open.bigmodel.cn/pricing)
+- [阶跃星辰API文档](https://platform.stepfun.com/docs/overview/concept)
 ```

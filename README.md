@@ -15,6 +15,8 @@ UnionLLM目前支持的国内大语言模型包括：
 - 讯飞星火
 - 百川智能
 - 昆仑天工
+- 零一万物
+- 阶跃星辰
 
 UnionLLM目前支持的Agent编排工具包括：
 - Coze
@@ -69,11 +71,13 @@ ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', i
 - [智谱AI](docs/zhipuai.md)
 - [月之暗面Moonshot](docs/moonshot.md)
 - [百度文心一言](docs/baidu.md)
-- [阿里巴巴通义千问](docs/qwen.md)
+- [阿里通义千问](docs/qwen.md)
 - [MiniMax](docs/minimax.md)
 - [讯飞星火](docs/xunfei.md)
 - [百川智能](docs/baichuan.md)
 - [昆仑天工](docs/tiangong.md)
+- [零一万物](docs/lingyi.md)
+- [阶跃星辰](docs/stepfun.md)
 - [Coze](docs/coze.md)
 - [FastGPT](docs/fastgpt.md)
 - [Dify](docs/dify.md)

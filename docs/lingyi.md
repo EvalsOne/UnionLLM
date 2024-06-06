@@ -1,10 +1,10 @@
-# 智谱AI
+# 零一万物
 
-### 通过环境变量设置API KEY
+## 通过环境变量设置调用参数
 
-```
+```python
 import os 
-os.environ["ZHIPU_API_KEY"] = "your-zhipu-api-key"
+os.environ["LINGYI_API_KEY"] = "your-lingyi-api-key"
 ```
 
 ### 非流式调用
@@ -14,8 +14,8 @@ from unionllm import unionchat
 
 # model call
 response = unionchat(
-    provider="zhipuai",
-    model="glm-4", 
+    provider="lingyi",
+    model="yi-large", 
     messages = [{ "content": "Hello, how are you?","role": "user"}],
     stream=False
 )
@@ -30,8 +30,8 @@ from unionllm import unionchat
 
 # model call
 response = unionchat(
-    provider="zhipuai",
-    model="glm-4", 
+    provider="lingyi",
+    model="yi-large", 
     messages = [{ "content": "Hello, how are you?","role": "user"}],
     stream=True
 )
@@ -45,18 +45,16 @@ for chunk in response:
 ```python
 # model call
 response = unionchat(
-    provider="zhipuai",
-    model="glm-4", 
-    api_key="your-zhipu-api-key",
+    provider="lingyi",
+    model="yi-large",
+    api_key="your-lingyi-api-key",
     messages = [{ "content": "Hello, how are you?","role": "user"}]
 )
 ```
 
-
 ## 支持模型
-支持天工的所有文本模型
+支持零一万物的所有模型
 
 参考文档：
-- [API调用](https://open.bigmodel.cn/dev/api)
-- [模型价格](https://open.bigmodel.cn/pricing)
+- [零一万物API文档](https://platform.lingyiwanwu.com/docs)
 ```

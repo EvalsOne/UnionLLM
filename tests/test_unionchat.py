@@ -24,6 +24,8 @@ common_messages = [{"content": "你的开发者是谁？", "role": "user"}]
     ("minimax", "abab5.5-chat", common_messages, None, False),
     ("baichuan", "Baichuan2-Turbo", common_messages, None, False),
     ("xunfei", "generalv3", common_messages, None, False),
+    ("lingyi", "yi-large", common_messages, None, False),
+    ("stepfun", "step-1-8k", common_messages, None, False),
     ("coze", "coze", common_messages, None, False),
     ("dify", "dify", common_messages, None, False),
     ("fastgpt", "fastgpt", common_messages, None, False),    
@@ -53,6 +55,8 @@ common_messages = [{"content": "你的开发者是谁？", "role": "user"}]
     ("groq", "groq/mixtral-8x7b-32768", common_messages, None, True),
     ("bedrock", "ai21.j2-ultra-v1", common_messages, None, True),
     ("nonexistent", "model", common_messages, ProviderError, True),
+    ("lingyi", "yi-large", common_messages, None, True),
+    ("stepfun", "step-1-8k", common_messages, None, True),
 ])
 
 def test_unionchat(provider, model, messages, expected_exception, stream_mode, mocker):
@@ -74,6 +78,7 @@ def test_unionchat(provider, model, messages, expected_exception, stream_mode, m
         result = unionchat(provider=provider, model=model, messages=messages, stream=stream_mode)
         if stream_mode:
             for response in result:
+                print(response)
                 assert isinstance(response, ModelResponse), "Each item in the stream should be an instance of ModelResponse"
         else:
             print(result)

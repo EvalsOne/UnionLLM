@@ -3,15 +3,16 @@ import asyncio
 from functools import partial
 
 from typing import Any, List
-from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm
+from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm, lingyi, stepfun
 from .exceptions import ProviderError
 from litellm import completion as litellm_completion
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
 class UnionLLM:
-    def __init__(self, provider: str, **kwargs):
-        self.provider = provider.lower()
+    def __init__(self, provider: Optional[str] = None, **kwargs):
+        self.provider = provider.lower() if provider else None
         self.litellm_call_type = None
         if self.provider == "zhipuai":
             self.provider_instance = zhipu.ZhipuAIProvider(**kwargs)
@@ -35,6 +36,10 @@ class UnionLLM:
             self.provider_instance = fastgpt.FastGPTProvider(**kwargs)
         elif self.provider == "coze":
             self.provider_instance = coze.CozeAIProvider(**kwargs)
+        elif self.provider == "lingyi":
+            self.provider_instance = lingyi.LingyiAIProvider(**kwargs)
+        elif self.provider == "stepfun":
+            self.provider_instance = stepfun.StepfunAIProvider(**kwargs)
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
@@ -60,6 +65,8 @@ class UnionLLM:
                     model = f"{self.provider}/{model}"
                 return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 2:
+                return self.provider_instance.completion(model, messages, **kwargs)
+            elif self.litellm_call_type == 3:
                 return self.provider_instance.completion(model, messages, **kwargs)
         else:
             return self.provider_instance.completion(model, messages, **kwargs)
