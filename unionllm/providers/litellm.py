@@ -1,6 +1,7 @@
 import json, time
 import dashscope
 from .base_provider import BaseProvider
+import litellm
 from litellm import completion
 
 class LiteLLMError(Exception):
@@ -15,13 +16,14 @@ class LiteLLMError(Exception):
 
 class LiteLLMProvider(BaseProvider):
     def __init__(self, **model_kwargs):
+        litellm.drop_params = True
         pass
 
     def pre_processing(self, **kwargs):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base"
+            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base", "stream_options"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
@@ -33,7 +35,7 @@ class LiteLLMProvider(BaseProvider):
         result = completion(
             model=model, messages=messages, **new_kwargs
         )
-        return self.post_stream_processing(result)
+        return self.post_stream_processing(result, model=model)
 
     def create_model_response_wrapper(self, result, model):
         return self.create_model_response(result, model=model)
@@ -41,7 +43,6 @@ class LiteLLMProvider(BaseProvider):
     def completion(self, model: str, messages: list, **kwargs):
         try:
             if 'provider' in kwargs:
-                print("Litellm provider", kwargs['provider'])
                 kwargs.pop('provider')
             if model is None or messages is None:
                 raise LiteLLMError(

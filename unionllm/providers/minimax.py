@@ -111,7 +111,6 @@ class MinimaxAIProvider(BaseProvider):
             stream = kwargs.get("stream", False)
 
             if stream:
-                print("streaming")
                 return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             
             else:

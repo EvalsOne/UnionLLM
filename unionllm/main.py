@@ -43,6 +43,9 @@ class UnionLLM:
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
+                if 'stream' in kwargs and kwargs['stream'] == True:
+                    if 'stream_options' not in kwargs:
+                        kwargs['stream_options'] = {"include_usage": True}
                 self.provider_instance = litellm.LiteLLMProvider(**kwargs)
                 if support_type == 1:
                     self.litellm_call_type = 1
@@ -51,9 +54,10 @@ class UnionLLM:
             else:
                 raise ProviderError(f"Provider '{self.provider}' is not supported.")
         else:
+            if 'stream' in kwargs and kwargs['stream'] == True:
+                if 'stream_options' not in kwargs:
+                    kwargs['stream_options'] = {"include_usage": True}
             self.provider_instance = litellm.LiteLLMProvider(**kwargs)
-
-
 
     def completion(self, model: str, messages: List[str], **kwargs) -> Any:
         if not self.provider_instance:
@@ -63,6 +67,7 @@ class UnionLLM:
                 # Jugde whether the model starts with self.provider, if not, add it
                 if not model.startswith(self.provider+"/"):
                     model = f"{self.provider}/{model}"
+                    
                 return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 2:
                 return self.provider_instance.completion(model, messages, **kwargs)
@@ -89,10 +94,10 @@ class UnionLLM:
 
     def check_litellm_providers(self, provider: str) -> bool:
         # Judge whether the provider is supported by LiteLLM, and if provider name should be added to the model name
-        if provider in ['azure', 'sagemaker', 'bedrock', 'vertex_ai', 'palm', 'gemini', 'mistral', 'cloudflare', 'huggingface', 'replicate', 'together_ai', 'openrouter', 'baseten', 'nlp_cloud', 'petals', 'ollama', 'perplexity', 'groq', 'anyscale', 'watsonx', 'voyage', 'xinference']:
+        if provider in ['azure', 'anthropic', 'sagemaker', 'bedrock', 'vertex_ai', 'palm', 'gemini', 'mistral', 'cloudflare', 'huggingface', 'replicate', 'together_ai', 'openrouter', 'baseten', 'nlp_cloud', 'petals', 'ollama', 'perplexity', 'groq', 'anyscale', 'watsonx', 'voyage', 'xinference']:
             # provider name should be added to the model name
             return True, 1
-        elif provider in ['openai', 'anthropic', 'cohere', 'ai21', 'deepseek', 'deepinfra', 'ai21', 'alpha_alpha']:
+        elif provider in ['openai', 'cohere', 'ai21', 'deepseek', 'deepinfra', 'ai21', 'alpha_alpha']:
             # provider name should not be added to the model name
             return True, 2
         else:

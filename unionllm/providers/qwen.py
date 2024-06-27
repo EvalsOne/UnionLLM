@@ -83,8 +83,9 @@ class QwenAIProvider(BaseProvider):
             else:
                 raise QwenOpenAIError(
                     status_code=response.status_code,
-                    message=f"Request id: {response.request_id}, Status code: {response.status_code}, error code: {response.code}, error message: {response.message}",
+                    message=f"error message: {response.message}",
                 )
+                
 
     def create_model_response_wrapper(self, response, model):
         if response.status_code == HTTPStatus.OK:

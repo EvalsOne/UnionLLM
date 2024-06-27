@@ -21,7 +21,7 @@ class TianGongAIProvider(BaseProvider):
         _env_app_key = os.environ.get("TIANGONG_APP_KEY")
         _env_app_secret = os.environ.get("TIANGONG_APP_SECRET")
         self.app_key = model_kwargs.get("app_key") if model_kwargs.get("app_key") else _env_app_key
-        self.app_secret = model_kwargs.get("app_key") if model_kwargs.get("app_key") else _env_app_secret
+        self.app_secret = model_kwargs.get("app_secret") if model_kwargs.get("app_secret") else _env_app_secret
         if not self.app_key or not self.app_secret:
             raise TianGongOpenAIError(
                 status_code=422, message=f"Missing APP key or APP secret"
@@ -119,34 +119,33 @@ class TianGongAIProvider(BaseProvider):
 
 
     def completion(self, model: str, messages: list, **kwargs):
-        try:
-            if model is None or messages is None:
+        if model is None or messages is None:
+            raise TianGongOpenAIError(
+                status_code=422, message=f"Missing model or messages"
+            )
+        new_kwargs = self.pre_processing(**kwargs)
+        stream = kwargs.get("stream", False)
+
+        messages = self.to_formatted_prompt(messages)
+
+        if stream:
+            return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
+        else:
+            timestamp = str(int(time.time()))
+            sign_content = self.app_key + self.app_secret + timestamp
+            sign_result = hashlib.md5(sign_content.encode("utf-8")).hexdigest()
+            payload = {"model": model, "messages": messages, **new_kwargs}
+            headers = {
+                "app_key": self.app_key,
+                "timestamp": timestamp,
+                "sign": sign_result,
+                "Content-Type": "application/json",
+                "stream": "false",
+            }
+            result = requests.post(self.endpoint_url, headers=headers, json=payload)
+            result_json = result.json()
+            if result_json['code'] != 200:
                 raise TianGongOpenAIError(
-                    status_code=422, message=f"Missing model or messages"
+                    status_code=result_json['code'], message=result_json['code_msg']
                 )
-            new_kwargs = self.pre_processing(**kwargs)
-            stream = kwargs.get("stream", False)
-
-            messages = self.to_formatted_prompt(messages)
-
-            if stream:
-                return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
-            else:
-                timestamp = str(int(time.time()))
-                sign_content = self.app_key + self.app_secret + timestamp
-                sign_result = hashlib.md5(sign_content.encode("utf-8")).hexdigest()
-                payload = {"model": model, "messages": messages, **new_kwargs}
-                print("payload", payload)
-                headers = {
-                    "app_key": self.app_key,
-                    "timestamp": timestamp,
-                    "sign": sign_result,
-                    "Content-Type": "application/json",
-                    "stream": "false",
-                }
-                result = requests.post(self.endpoint_url, headers=headers, json=payload)
-                print(result, result.json())
-                return self.create_model_response_wrapper(result, model=model)
-        except Exception as e:
-            if hasattr(e, "status_code"):
-                raise TianGongOpenAIError(status_code=e.status)
+            return self.create_model_response_wrapper(result, model=model)

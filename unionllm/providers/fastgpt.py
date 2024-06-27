@@ -165,8 +165,6 @@ class FastGPTProvider(BaseProvider):
                     "Content-Type": "application/json",
                 }
                 result = requests.post(self.endpoint_url, headers=headers, data=payload)
-                # print("fastgpt response")
-                # print(result.json())
                 return self.create_model_response_wrapper(result)
         except Exception as e:
             if hasattr(e, "status_code"):
