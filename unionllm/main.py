@@ -43,9 +43,6 @@ class UnionLLM:
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
-                if 'stream' in kwargs and kwargs['stream'] == True:
-                    if 'stream_options' not in kwargs:
-                        kwargs['stream_options'] = {"include_usage": True}
                 self.provider_instance = litellm.LiteLLMProvider(**kwargs)
                 if support_type == 1:
                     self.litellm_call_type = 1
@@ -54,9 +51,6 @@ class UnionLLM:
             else:
                 raise ProviderError(f"Provider '{self.provider}' is not supported.")
         else:
-            if 'stream' in kwargs and kwargs['stream'] == True:
-                if 'stream_options' not in kwargs:
-                    kwargs['stream_options'] = {"include_usage": True}
             self.provider_instance = litellm.LiteLLMProvider(**kwargs)
 
     def completion(self, model: str, messages: List[str], **kwargs) -> Any:

@@ -51,6 +51,8 @@ class LiteLLMProvider(BaseProvider):
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
             if stream:
+                new_kwargs['stream_options'] = {"include_usage": True}
+            if stream:
                 return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             else:
                 result = completion(
