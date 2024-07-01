@@ -87,6 +87,7 @@ ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', i
 - [Coze](docs/coze.md)
 - [FastGPT](docs/fastgpt.md)
 - [Dify](docs/dify.md)
+- [字节豆包](docs/doubao.md)
 - [通过LiteLLM调用其他大模型](docs/litellm.md)
 
 UnionLLM目前提供的功能包括：
