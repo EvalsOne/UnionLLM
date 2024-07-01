@@ -3,7 +3,7 @@ import asyncio
 from functools import partial
 
 from typing import Any, List
-from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm, lingyi, stepfun
+from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao
 from .exceptions import ProviderError
 from litellm import completion as litellm_completion
 from typing import Optional

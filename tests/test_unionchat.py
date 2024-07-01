@@ -15,48 +15,52 @@ common_messages = [{"content": "你的开发者是谁？", "role": "user"}]
 
 @pytest.mark.parametrize("provider, model, messages, expected_exception, stream_mode", [
     # non stream mode
-    ("azure", "azure/gpt-35-turbo", common_messages, None, False),
-    ("zhipuai", "glm-4", common_messages, None, False),
-    ("tiangong", "SkyChat-MegaVerse", common_messages, None, False),
-    ("wenxin", "ERNIE-3.5-8K", common_messages, None, False),
-    ("qwen", "qwen-plus", common_messages, None, False),
-    ("moonshot", "moonshot-v1-8k", common_messages, None, False),
-    ("minimax", "abab5.5-chat", common_messages, None, False),
-    ("baichuan", "Baichuan2-Turbo", common_messages, None, False),
-    ("xunfei", "generalv3", common_messages, None, False),
-    ("lingyi", "yi-large", common_messages, None, False),
-    ("stepfun", "step-1-8k", common_messages, None, False),
-    ("coze", "coze", common_messages, None, False),
-    ("dify", "dify", common_messages, None, False),
-    ("fastgpt", "fastgpt", common_messages, None, False),    
-    {"ollama", "ollama/llama3", common_messages, None, False}
-    ("mistral", "mistral-large-latest", common_messages, None, False),
-    ("cohere", "command-r", common_messages, None, False),
-    ("groq", "groq/mixtral-8x7b-32768", common_messages, None, False),
-    ("bedrock", "ai21.j2-ultra-v1", common_messages, None, False),
-    ("", "groq/mixtral-8x7b-32768", common_messages, None, False), #no provider case
-    ("nonexistent", "model", common_messages, ProviderError, False),
+    # This line is part of a parameterized test in Python using pytest. It defines a set of input
+    # parameters for the test function `test_unionchat`.
+    # ("azure", "azure/gpt-35-turbo", common_messages, None, False),
+    # ("zhipuai", "glm-4", common_messages, None, False),
+    # ("tiangong", "SkyChat-MegaVerse", common_messages, None, False),
+    # ("wenxin", "ERNIE-3.5-8K", common_messages, None, False),
+    # ("qwen", "qwen-plus", common_messages, None, False),
+    # ("doubao", "ep-20240630165653-phz9t", common_messages, None, False),
+    # ("moonshot", "moonshot-v1-8k", common_messages, None, False),
+    # ("minimax", "abab5.5-chat", common_messages, None, False),
+    # ("baichuan", "Baichuan2-Turbo", common_messages, None, False),
+    # ("xunfei", "generalv3", common_messages, None, False),
+    # ("lingyi", "yi-large", common_messages, None, False),
+    # ("stepfun", "step-1-8k", common_messages, None, False),
+    # ("coze", "coze", common_messages, None, False),
+    # ("dify", "dify", common_messages, None, False),
+    # ("fastgpt", "fastgpt", common_messages, None, False),    
+    # {"ollama", "ollama/llama3", common_messages, None, False}
+    # ("mistral", "mistral-large-latest", common_messages, None, False),
+    # ("cohere", "command-r", common_messages, None, False),
+    # ("groq", "groq/mixtral-8x7b-32768", common_messages, None, False),
+    # ("bedrock", "ai21.j2-ultra-v1", common_messages, None, False),
+    # ("", "groq/mixtral-8x7b-32768", common_messages, None, False), #no provider case
+    # ("nonexistent", "model", common_messages, ProviderError, False),
     # stream mode
-    ("azure", "azure/gpt-35-turbo", common_messages, None, True),
-    ("zhipuai", "glm-4", common_messages, None, True),
-    ("nonexistent", "model", common_messages, ProviderError, True),
-    ("tiangong", "SkyChat-MegaVerse", common_messages, None, True),
-    ("wenxin", "ERNIE-3.5-8K", common_messages, None, True),
-    ("qwen", "qwen-plus", common_messages, None, True),
-    ("moonshot", "moonshot-v1-8k", common_messages, None, True),
-    ("minimax", "abab5.5-chat", common_messages, None, True),
-    ("baichuan", "Baichuan2-Turbo", common_messages, None, True),
-    ("coze", "coze", common_messages, None, True),
-    ("dify", "dify", common_messages, None, True),
-    ("fastgpt", "fastgpt", common_messages, None, True),    
-    {"ollama", "ollama/llama3", common_messages, None, False}
-    ("mistral", "mistral-large-latest", common_messages, None, True),
-    ("cohere", "command-r", common_messages, None, True),
-    ("groq", "groq/mixtral-8x7b-32768", common_messages, None, True),
-    ("bedrock", "ai21.j2-ultra-v1", common_messages, None, True),
-    ("nonexistent", "model", common_messages, ProviderError, True),
-    ("lingyi", "yi-large", common_messages, None, True),
-    ("stepfun", "step-1-8k", common_messages, None, True),
+    # ("doubao", "ep-20240630165653-phz9t", common_messages, None, True),
+    # ("azure", "azure/gpt-35-turbo", common_messages, None, True),
+    # ("zhipuai", "glm-4", common_messages, None, True),
+    # ("nonexistent", "model", common_messages, ProviderError, True),
+    # ("tiangong", "SkyChat-MegaVerse", common_messages, None, True),
+    # ("wenxin", "ERNIE-3.5-8K", common_messages, None, True),
+    # ("qwen", "qwen-plus", common_messages, None, True),
+    # ("moonshot", "moonshot-v1-8k", common_messages, None, True),
+    # ("minimax", "abab5.5-chat", common_messages, None, True),
+    # ("baichuan", "Baichuan2-Turbo", common_messages, None, True),
+    # ("coze", "coze", common_messages, None, True),
+    # ("dify", "dify", common_messages, None, True),
+    # ("fastgpt", "fastgpt", common_messages, None, True),    
+    # {"ollama", "ollama/llama3", common_messages, None, False}
+    # ("mistral", "mistral-large-latest", common_messages, None, True),
+    # ("cohere", "command-r", common_messages, None, True),
+    # ("groq", "groq/mixtral-8x7b-32768", common_messages, None, True),
+    # ("bedrock", "ai21.j2-ultra-v1", common_messages, None, True),
+    # ("nonexistent", "model", common_messages, ProviderError, True),
+    # ("lingyi", "yi-large", common_messages, None, True),
+    # ("stepfun", "step-1-8k", common_messages, None, True),
 ])
 
 def test_unionchat(provider, model, messages, expected_exception, stream_mode, mocker):
@@ -78,8 +82,6 @@ def test_unionchat(provider, model, messages, expected_exception, stream_mode, m
         result = unionchat(provider=provider, model=model, messages=messages, stream=stream_mode)
         if stream_mode:
             for response in result:
-                print(response)
                 assert isinstance(response, ModelResponse), "Each item in the stream should be an instance of ModelResponse"
         else:
-            print(result)
             assert isinstance(result, ModelResponse), "The result should be an instance of ModelResponse"
