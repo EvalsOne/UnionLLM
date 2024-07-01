@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='unionllm',
-    version='0.1.9',
+    version='0.1.10',
     license='MIT',
     description='A Python library for unified access to Chinese domestic large language models.',
     author='everfly',
