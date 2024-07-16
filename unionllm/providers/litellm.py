@@ -23,7 +23,7 @@ class LiteLLMProvider(BaseProvider):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base", "stream_options"
+            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base", ""
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:

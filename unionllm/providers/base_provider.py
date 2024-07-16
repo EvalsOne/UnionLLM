@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from ..models import ResponseModel
 from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, List
-from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta
+from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, check_object_input_support, check_vision_input_support, reformat_object_content, check_file_input_support
 
 import openai
 import json
@@ -27,6 +27,86 @@ class BaseProvider(ABC):
     @abstractmethod
     def completion(self, model: str, messages: list) -> ResponseModel:
         pass
+
+    def check_prompt(self, provider, model, messages):
+        # 遍历messages列表，判断消息中间是否存在system消息，是否所有消息content都是string类型, 是否消息中包含图片和文件类型
+        is_invalid_format = False
+        has_middle_system = False
+        has_object_content = False
+        has_vision_input = False
+        has_file_input = False
+        for i, message in enumerate(messages):
+            if message.get("role") == "system":
+                if i != 0:
+                    has_middle_system = True
+            if not isinstance(message.get("content"), str):
+                if isinstance(message.get("content"), list):
+                    message_contents = message.get("content")
+                    for content in message_contents:
+                        if not isinstance(content, dict):
+                            is_invalid_format = True
+                        else:
+                            has_object_content = True
+                            if content.get("type") == "image_url":
+                                if content.get("image_url").get("url"):
+                                    has_vision_input = True
+                                else:
+                                    is_invalid_format = True
+                            elif content.get("type") == "file_url":
+                                if content.get("file_url").get("url"):
+                                    has_file_input = True
+                                else:
+                                    is_invalid_format = True
+                                                                      
+        if is_invalid_format:
+            return {"pass_check": False, "reformatted": False, "reason": "Invalid message format"}
+
+        reformated = 0
+        if has_object_content:
+            # 判断object content是否支持
+            object_support = check_object_input_support(provider)
+            if object_support == "NONE":
+                # 如果不支持
+                if has_vision_input or has_file_input:
+                    # 如果包含图片或文件，则返回错误信息
+                    return {"pass_check": False, "reformatted": False, "reason": "Object content is not supported"}
+                else:
+                    # 如果不包含，则将object content转为文本
+                    messages = reformat_object_content(messages, False, False, False)
+                    reformated = 1
+            else:
+                # 如果支持
+                reformat_image = 0
+                reformat_file = 0
+                if object_support == "PARTIAL":
+                    # 如果部分支持，则需要将object content转为文本
+                    reformated = 1
+                if has_vision_input:
+                    # 如果包含图片
+                    vision_input_support = check_vision_input_support(provider, model)
+                    
+                    if vision_input_support == "PARTIAL":
+                        # 如果图片是部分支持，则需要将图片转为文本
+                        reformat_image = 1
+                        reformated = 1
+                    elif vision_input_support == "NONE":
+                        # 如果图片不支持，则返回错误信息
+                        return {"pass_check": False, "reformatted": False, "reason": "Vision input is not supported"}
+                    
+                if has_file_input:
+                    # 如果包含文件
+                    file_input_support = check_file_input_support(provider, model)
+                    if file_input_support == "PARTIAL":
+                        # 如果文件是部分支持，则需要将文件转为文本
+                        reformat_file= 1
+                        reformated = 1
+                    elif file_input_support == "NONE":
+                        # 如果文件不支持，则返回错误信息
+                        return {"pass_check": False, "reformatted": False, "messages": messages, "reason": "File input is not supported"}
+                if reformated or reformat_image or reformat_file:
+                    messages = reformat_object_content(messages, 1, reformat_image, reformat_file)
+                
+        return {"pass_check": True, "reformatted": reformated, "messages": messages}         
 
     def create_model_response(
         self, openai_response: openai.ChatCompletion, model: str

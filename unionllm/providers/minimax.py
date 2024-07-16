@@ -107,6 +107,15 @@ class MinimaxAIProvider(BaseProvider):
                 raise MinimaxOpenAIError(
                     status_code=422, message=f"Missing model or messages"
                 )
+                
+            message_check_result = self.check_prompt("minimax", model, messages)            
+            if message_check_result['pass_check']:
+                messages = message_check_result['messages']
+            else:
+                raise MinimaxOpenAIError(
+                    status_code=422, message=message_check_result['reason']
+                )
+                
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 

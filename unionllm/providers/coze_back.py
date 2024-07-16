@@ -32,12 +32,8 @@ class CozeAIProvider(BaseProvider):
                 status_code=422, message=f"Missing Bot ID"
             )
         
-        self.base_url = "https://api.coze.com/v3"
-        self.base_url_v2 = "https://api.coze.com/open_api/v2"
+        self.base_url = "https://api.coze.com/open_api/v2"
         self.endpoint_url = self.base_url + "/chat"
-        self.endpoint_url_v2 = self.base_url_v2 + "/chat"
-        if self.conversation_id:
-            self.endpoint_url = self.endpoint_url + "?conversation_id=" + self.conversation_id
 
     def pre_processing(self, **kwargs):
         # 处理参数兼容性问题，不支持的参数全部舍弃
@@ -82,7 +78,7 @@ class CozeAIProvider(BaseProvider):
             user_id = generate_unique_uid()
         else:
             user_id = new_kwargs['user_id']
-        payload = {"user_id": user_id,"bot_id": self.bot_id,"additional_messages":messages, "stream": True, "auto_save_history": True}
+        payload = {"query": query,"user": user_id,"bot_id": self.bot_id,"chat_history":history, "stream": True}
         if self.conversation_id:
             payload['conversation_id'] = self.conversation_id
         payload = json.dumps(payload)
@@ -92,65 +88,82 @@ class CozeAIProvider(BaseProvider):
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
 
-        event_type = None
-        index = 0
         for line in response.iter_lines():
             if line:
-                if line.startswith(b"event:"):
-                    event_type = line.decode("utf-8").replace("event:", "").strip()
-                    continue
+                print(line)
                 if line.startswith(b"data:"):
                     new_line = line.decode("utf-8").replace("data:", "")
                     if new_line == "[DONE]":
-                        break
+                        continue
+
                     data = json.loads(new_line)
                     chunk_context = []
                     chunk_choices = []
-                    chunk_usage = Usage()
+                    index = 0
+                    if "message" in data:
+                        message = data["message"]
+                        if message['role'] == 'assistant':
+                            if message['type'] == 'knowledge':
+                                # 解析知识型内容
+                                content = message['content']
+                                # 假设knowledge类型内容是由"---\nrecall slice X:\n"分隔的
+                                slices = content.split('---\n')
+                                index = 0
+                                for slice in slices:
+                                    if slice.strip().startswith('recall slice'):
+                                        # 去掉前缀找到JSON部分
+                                        json_part = slice.strip().split('\n', 1)[-1].strip()
+                                        # 如果不是以\"}结尾，则强制添加
+                                        if not json_part.endswith('\"}'):
+                                            json_part += '\"}'
+                                        try:
+                                            # 尝试解析JSON数据
+                                            recall_data = json.loads(json_part)
+                                            chunk_context.append({
+                                                "id": index,
+                                                "content": str(recall_data)    
+                                            })
+                                            index += 1
+                                        except json.JSONDecodeError:
+                                            raise CozeAIError(status_code=500, message=f"Error decoding JSON from slice: {json_part}")
 
-                    if isinstance(data, dict):
-                        conversation_id = data['conversation_id']
-                        chat_id = data['id']
-    
-                    if event_type=="conversation.message.delta":
-                        if "type" in data:
-                            message_type = data["type"]
-                            if message_type == "answer":
+                            elif message['type'] == 'answer':
                                 chunk_choices = []
                                 chunk_delta = Delta()
-                                if "role" in data:
-                                    chunk_delta.role = data["role"]
-                                if "content" in data:
-                                    chunk_delta.content = data["content"]
+                                if "role" in message:
+                                    chunk_delta.role = message["role"]
+                                if "content" in message:
+                                    chunk_delta.content = message["content"]
                                 chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
-                                                
-                    elif event_type=="conversation.chat.completed":
-                        if "usage" in data and data["usage"]:
-                            if "input_count" in data["usage"]:
-                                chunk_usage.prompt_tokens = data["usage"]["input_count"]
-                            if "output_count" in data["usage"]:
-                                chunk_usage.completion_tokens = data["usage"]["output_count"]
-                            if "token_count" in data["usage"]:
-                                chunk_usage.total_tokens = data["usage"]["token_count"]   
                         
-                    chunk_response = ModelResponse(
-                        id=chat_id,
-                        conversation_id=conversation_id,
-                        choices=chunk_choices,
-                        context=chunk_context,
-                        created=int(time.time()),
-                        model=model,
-                        usage=chunk_usage if chunk_usage else None,
-                        stream=True
-                    )
-                    index += 1
-                    yield chunk_response
+                        chunk_usage = Usage()
+                        # if data["usage"]:
+                        #     if "prompt_tokens" in data["usage"]:
+                        #         chunk_usage.prompt_tokens = data["usage"]["prompt_tokens"]
+                        #     if "completion_tokens" in data["usage"]:
+                        #         chunk_usage.completion_tokens = data["usage"]["completion_tokens"]
+                        #     if "total_tokens" in data["usage"]:
+                        #         chunk_usage.total_tokens = data["usage"]["total_tokens"]                        
+
+                        chunk_response = ModelResponse(
+                            id=self.conversation_id,
+                            conversation_id=self.conversation_id,
+                            choices=chunk_choices,
+                            context=chunk_context,
+                            created=int(time.time()),
+                            model=model,
+                            usage=chunk_usage if chunk_usage else None,
+                            stream=True
+                        )
+                        index += 1
+                        yield chunk_response
 
     def create_model_response_wrapper(self, result, model):
         choices = []
         context = []
 
         result_dict = result.json()
+        print(result_dict)
         messages = result_dict.get('messages', [])
         if not messages:
             code = result_dict.get('code', 500)
@@ -225,9 +238,7 @@ class CozeAIProvider(BaseProvider):
                     status_code=422, message=message_check_result['reason']
                 )
                 
-            for message in messages:
-                if 'content_type' not in message:
-                    message['content_type'] = 'text'
+            print("reformatted message", messages)
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 
@@ -250,9 +261,9 @@ class CozeAIProvider(BaseProvider):
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 }
-                result = requests.post(self.endpoint_url_v2, headers=headers, data=payload)
-                print("CozeAI response")
-                print(result.json())
+                result = requests.post(self.endpoint_url, headers=headers, data=payload)
+                # print("CozeAI response")
+                # print(result.json())
                 return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):

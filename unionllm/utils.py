@@ -212,6 +212,9 @@ class ModelResponse(OpenAIObject):
     usage: Optional[Usage] = None
     """Usage statistics for the completion request."""
 
+    conversation_id: Optional[str] = None
+    """A unique identifier for the conversation."""
+
     _hidden_params: dict = {}
 
     def __init__(
@@ -223,6 +226,7 @@ class ModelResponse(OpenAIObject):
         object=None,
         system_fingerprint=None,
         usage=None,
+        conversation_id=None,
         stream=False,
         response_ms=None,
         hidden_params=None,
@@ -250,6 +254,7 @@ class ModelResponse(OpenAIObject):
             object=object,
             system_fingerprint=system_fingerprint,
             usage=usage,
+            conversation_id=conversation_id,
             **params
         )
 
@@ -304,3 +309,67 @@ def generate_unique_uid():
     unique_uid = f"{microseconds:x}{rand_num:04x}"
     
     return unique_uid
+
+def check_object_input_support(provider):
+    not_supported_providers = ["wenxin", "baichuan", "minimax", "xunfei", "tiangong", "lingyi", "dify", "fastgpt", "doubao", "moonshot"]
+    if provider in not_supported_providers:
+        return "NONE"
+    elif provider == "coze":
+        return "PARTIAL"
+    else:
+        return "FULL"
+
+def check_file_input_support(provider, model):
+    if provider == "coze":
+        return "PARTIAL"
+    else:
+        return "NONE"
+
+def check_vision_input_support(provider, model):
+    supported_providers = ['zhipuai']
+    if provider == "coze":
+        return "PARTIAL"
+    elif provider not in supported_providers:
+        return "NONE"
+    
+    supported_models = [
+        {"zhipuai": ["glm-4v"]}
+    ]
+    
+    for entry in supported_models:
+        if provider in entry:
+            if model in entry[provider]:
+                return "FULL"    
+    return "NONE"
+
+def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False):
+    formatted_messages = []
+    for message in messages:
+        new_formatted_message = {}
+        if isinstance(message.get("content"), list):
+            new_formatted_message["role"] = message.get("role")
+            new_formatted_message["content"] = ""
+            message_contents = message.get("content")            
+            for content in message_contents:
+                if not isinstance(content, dict):
+                    return False
+                content_type = content.get("type")
+                if content_type == "text":
+                    if isinstance(content.get("text"), str):
+                        new_formatted_message["content"] += content.get("text")
+                elif content_type in ["image_url","image"]:
+                    if not reformat_image:
+                        return False
+                    elif content.get("image_url") and content.get("image_url").get("url"):
+                        new_formatted_message["content"] += f"![image]({content.get('image_url').get('url')})"
+                    else:
+                        return False
+                elif content_type == "file_url":
+                    if not reformat_file:
+                        return False
+                    elif content.get("file_url") and content.get("file_url").get("url"):
+                        new_formatted_message["content"] += f"[file]({content.get('file_url').get('url')})"
+                    else:
+                        return False
+            formatted_messages.append(new_formatted_message)   
+    return formatted_messages

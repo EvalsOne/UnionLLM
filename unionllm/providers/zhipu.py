@@ -47,6 +47,16 @@ class ZhipuAIProvider(BaseProvider):
                 raise ZhiPuOpenAIError(
                     status_code=422, message=f"Missing model or messages"
                 )
+                
+            message_check_result = self.check_prompt("zhipuai", model, messages)     
+            print(message_check_result)       
+            if message_check_result['pass_check']:
+                messages = message_check_result['messages']
+            else:
+                raise ZhiPuOpenAIError(
+                    status_code=422, message=message_check_result['reason']
+                )
+                
             new_kwargs = self.pre_processing(**kwargs)
             stream = new_kwargs.get("stream", False)
 

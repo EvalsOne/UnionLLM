@@ -148,28 +148,37 @@ class QwenAIProvider(BaseProvider):
 
 
     def completion(self, model: str, messages: list, **kwargs):
-            try:
-                if model is None or messages is None:
-                    raise QwenOpenAIError(
-                        status_code=422, message=f"Missing model or messages"
-                    )
-                new_kwargs = self.pre_processing(**kwargs)
-                stream = new_kwargs.get("stream", False)
+        try:
+            if model is None or messages is None:
+                raise QwenOpenAIError(
+                    status_code=422, message=f"Missing model or messages"
+                )
 
-                if stream:
-                    return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
+            message_check_result = self.check_prompt("qwen", model, messages)   
+            if message_check_result['pass_check']:
+                messages = message_check_result['messages']
+            else:
+                raise QwenOpenAIError(
+                    status_code=422, message=message_check_result['reason']
+                )                
+            new_kwargs = self.pre_processing(**kwargs)
+            stream = new_kwargs.get("stream", False)
+            if stream:
+                return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
+            else:
+                response = Generation.call(
+                    model=model,
+                    messages=messages,
+                    result_format="message",
+                    **new_kwargs,
+                )
+                if response.status_code == HTTPStatus.OK:
+                    return self.create_model_response_wrapper(response, model=model)
                 else:
-                    response = Generation.call(
-                        model=model,
-                        messages=messages,
-                        result_format="message",
-                        **new_kwargs,
-                    )
-                    if response.status_code == HTTPStatus.OK:
-                        return self.create_model_response_wrapper(response, model=model)
-                    else:
-                        return {'success': False, 'error': {'status_code': response.status_code, 'message': response.message}}
-            except QwenOpenAIError as e:
-                return {'success': False, 'error': {'status_code': e.status_code, 'message': e.message}}
-            except Exception as e:
-                return {'success': False, 'error': {'status_code': 500, 'message': str(e)}}
+                    return {'success': False, 'error': {'status_code': response.status_code, 'message': response.message}}
+        except Exception as e:
+            if hasattr(e, "status_code"):
+                raise QwenOpenAIError(status_code=e.status_code, message=str(e))
+            else:
+                raise QwenOpenAIError(status_code=500, message=str(e))
+        

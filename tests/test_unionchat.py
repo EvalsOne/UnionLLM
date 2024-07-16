@@ -4,6 +4,87 @@ from unittest.mock import patch, MagicMock
 from dotenv import load_dotenv
 load_dotenv()
 
+import os
+
+# baichuan
+os.environ['BAICHUAN_API_KEY'] = 'your-baichuan-api-key'
+
+# zhipu
+os.environ['ZHIPU_API_KEY'] = 'your-zhipu-api-key'
+
+# moonshot
+os.environ['MOONSHOT_API_KEY'] = 'your-moonshot-api-key'
+
+# qwen
+os.environ['DASHSCOPE_API_KEY'] = 'your-dashscope-api-key'
+
+# minimax
+os.environ['MINIMAX_API_KEY'] = 'your-minimax-api-key'
+
+# coze
+os.environ['COZE_API_KEY'] = 'your-coze-api-key'
+os.environ['COZE_BOT_ID'] = 'your-coze-bot-id'
+
+# dify
+os.environ['DIFY_API_KEY'] = 'your-dify-api-key'
+
+# fastgpt
+os.environ['FASTGPT_API_KEY'] = 'your-fastgpt-api-key'
+
+# wenxin
+os.environ['ERNIE_CLIENT_ID'] = 'your-ernie-client-id'
+os.environ['ERNIE_CLIENT_SECRET'] = 'your-ernie-client-secret'
+
+# tiangong
+os.environ['TIANGONG_APP_KEY'] = 'your-tiangong-app-key'
+os.environ['TIANGONG_APP_SECRET'] = 'your-tiangong-app-secret'
+
+# xunfei
+os.environ['XUNFEI_APP_ID'] = 'your-xunfei-app-id'
+os.environ['XUNFEI_API_KEY'] = 'your-xunfei-api-key'
+os.environ['XUNFEI_API_SECRET'] = 'your-xunfei-api-secret'
+
+# openai
+os.environ['OPENAI_API_KEY'] = 'your-openai-api-key'
+
+# azure
+os.environ['AZURE_API_KEY'] = 'your-azure-api-key'
+os.environ['AZURE_API_BASE'] = 'your-azure-api-base'
+os.environ['AZURE_API_VERSION'] = 'your-azure-api-version'
+
+# groq
+os.environ['GROQ_API_KEY'] = 'your-groq-api-key'
+
+# bedrock
+os.environ['AWS_ACCESS_KEY_ID'] = 'your-aws-access-key-id'
+os.environ['AWS_SECRET_ACCESS_KEY'] = 'your-aws-secret-access-key'
+os.environ['AWS_REGION_NAME'] = 'your-aws-region-name'
+
+# mistral
+os.environ['MISTRAL_API_KEY'] = 'your-mistral-api-key'
+
+# cohere
+os.environ['COHERE_API_KEY'] = 'your-cohere-api-key'
+
+# gemini
+os.environ['GEMINI_API_KEY'] = 'your-gemini-api-key'
+
+# openai
+os.environ['OPENAI_API_KEY'] = 'your-openai-api-key'
+
+# anthropic
+os.environ['ANTHROPIC_API_KEY'] = 'your-anthropic-api-key'
+
+# 01 yi-large
+os.environ['LINGYI_API_KEY'] = 'your-lingyi-api-key'
+
+# jieyuexingchen step-1-8k
+os.environ['STEPFUN_API_KEY'] = 'your-stepfun-api-key'
+
+# doubao
+os.environ['ARK_API_KEY'] = 'your-ark-api-key'
+
+
 # 将项目根目录添加到sys.path中
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -82,6 +163,8 @@ def test_unionchat(provider, model, messages, expected_exception, stream_mode, m
         result = unionchat(provider=provider, model=model, messages=messages, stream=stream_mode)
         if stream_mode:
             for response in result:
+                # print(response)
                 assert isinstance(response, ModelResponse), "Each item in the stream should be an instance of ModelResponse"
         else:
+            # print(result)
             assert isinstance(result, ModelResponse), "The result should be an instance of ModelResponse"

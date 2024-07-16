@@ -232,6 +232,15 @@ class XunfeiAIProvider(BaseProvider):
                 raise XunfeiOpenAIError(
                     status_code=422, message="Missing model or messages"
                 )
+                
+            message_check_result = self.check_prompt("xunfei", model, messages)            
+            if message_check_result['pass_check']:
+                messages = message_check_result['messages']
+            else:
+                raise XunfeiOpenAIError(
+                    status_code=422, message=message_check_result['reason']
+                )
+                
             new_kwargs = self.pre_processing(**kwargs)
 
             client = XunfeiWebSocketClient(self.app_id, self.api_key, self.api_secret, model, **new_kwargs)

@@ -19,6 +19,8 @@ class DifyAIProvider(BaseProvider):
         # Get DIFY_API_KEY from environment variables
         _env_api_key = os.environ.get("DIFY_API_KEY")
         self.api_key = model_kwargs.get("api_key") if model_kwargs.get("api_key") else _env_api_key
+        self.conversation_id = model_kwargs.get("conversation_id", "")
+        self.user = model_kwargs.get("user", "guest-user")
         if not self.api_key:
             raise DifyOpenAIError(
                 status_code=422, message=f"Missing API key"
@@ -48,10 +50,13 @@ class DifyAIProvider(BaseProvider):
 
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
-        # 预处理对话内容并返回最近的用户问题
+        # 预处理对话内容并返回最近的用户问题        
         messages, query = self.to_formatted_prompt(messages)
         mode = "streaming"
-        payload = json.dumps({"query": query, "response_mode": mode, "user": "abc-123","conversation_id": "","inputs":{}})
+        payload = {"query": query, "response_mode": mode, "user": self.user,"conversation_id": "","inputs":{}}
+        if self.conversation_id:
+            payload["conversation_id"] = self.conversation_id
+        payload = json.dumps(payload)
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -104,6 +109,7 @@ class DifyAIProvider(BaseProvider):
                                 })
                     chunk_response = ModelResponse(
                         id=msg_id,
+                        conversation_id=self.conversation_id,
                         choices=chunk_choices,
                         context=chunk_context,
                         created=int(time.time()),
@@ -153,6 +159,7 @@ class DifyAIProvider(BaseProvider):
 
         response = ModelResponse(
             id=response_dict["id"],
+            conversation_id=self.conversation_id,
             choices=choices,
             context=context,
             created=int(time.time()),            
@@ -168,6 +175,15 @@ class DifyAIProvider(BaseProvider):
                 raise DifyOpenAIError(
                     status_code=422, message=f"Missing model or messages"
                 )
+
+            message_check_result = self.check_prompt("dify", model, messages)            
+            if message_check_result['pass_check']:
+                messages = message_check_result['messages']
+            else:
+                raise DifyOpenAIError(
+                    status_code=422, message=message_check_result['reason']
+                )
+                
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 
@@ -177,7 +193,11 @@ class DifyAIProvider(BaseProvider):
                 messages, query = self.to_formatted_prompt(messages)
                 mode = "blocking"
 
-                payload = json.dumps({"query": query, "response_mode": mode, "user": "abc-123","conversation_id": "","inputs":{}})
+                payload = {"query": query, "response_mode": mode, "user": self.user,"conversation_id": "","inputs":{}}
+                if self.conversation_id:
+                    payload["conversation_id"] = self.conversation_id
+                payload = json.dumps(payload)
+                
                 headers = {
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
