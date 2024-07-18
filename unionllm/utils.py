@@ -210,10 +210,7 @@ class ModelResponse(OpenAIObject):
     """
 
     usage: Optional[Usage] = None
-    """Usage statistics for the completion request."""
-
-    conversation_id: Optional[str] = None
-    """A unique identifier for the conversation."""
+    """Usage statistics for the completion request."""  
 
     _hidden_params: dict = {}
 
@@ -246,6 +243,15 @@ class ModelResponse(OpenAIObject):
             usage = Usage()
         if hidden_params:
             self._hidden_params = hidden_params
+
+        filtered_params = {}      
+        if conversation_id:
+            filtered_params['conversation_id'] = conversation_id
+
+        # 只有当 conversation_id 不为 None 时才添加到 filtered_params
+        if 'conversation_id'in params and conversation_id is not None:
+            filtered_params['conversation_id'] = conversation_id
+        
         super().__init__(
             id=id,
             choices=choices,
@@ -254,8 +260,7 @@ class ModelResponse(OpenAIObject):
             object=object,
             system_fingerprint=system_fingerprint,
             usage=usage,
-            conversation_id=conversation_id,
-            **params
+            **filtered_params
         )
 
     def __contains__(self, key):

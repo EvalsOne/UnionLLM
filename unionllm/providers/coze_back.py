@@ -90,7 +90,6 @@ class CozeAIProvider(BaseProvider):
 
         for line in response.iter_lines():
             if line:
-                print(line)
                 if line.startswith(b"data:"):
                     new_line = line.decode("utf-8").replace("data:", "")
                     if new_line == "[DONE]":
@@ -238,7 +237,6 @@ class CozeAIProvider(BaseProvider):
                     status_code=422, message=message_check_result['reason']
                 )
                 
-            print("reformatted message", messages)
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 

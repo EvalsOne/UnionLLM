@@ -76,11 +76,11 @@ class DifyAIProvider(BaseProvider):
                     new_line = line.decode("utf-8").replace("data: ", "")
                     if new_line == "[DONE]":
                         continue
-                    
-                    
+                                        
                     data = json.loads(new_line)
                     event = data.get("event")
                     msg_id = data.get("message_id")
+                    conversation_id = data.get("conversation_id")
                     if event == "message":
                         if 'answer' in data:
                             chunk_message = data["answer"]
@@ -109,7 +109,7 @@ class DifyAIProvider(BaseProvider):
                                 })
                     chunk_response = ModelResponse(
                         id=msg_id,
-                        conversation_id=self.conversation_id,
+                        conversation_id=conversation_id,
                         choices=chunk_choices,
                         context=chunk_context,
                         created=int(time.time()),
