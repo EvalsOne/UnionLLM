@@ -81,13 +81,22 @@ class DifyAIProvider(BaseProvider):
                     event = data.get("event")
                     msg_id = data.get("message_id")
                     conversation_id = data.get("conversation_id")
-                    if event == "message":
+                    if event == "agent_message":
                         if 'answer' in data:
                             chunk_message = data["answer"]
                             if chunk_message:
                                 chunk_delta.role = "assistant"
                                 chunk_delta.content = chunk_message
                                 chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
+                    elif event == "message_file":
+                        if 'type' in data and data['type'] == "image":
+                            if 'url' in data:
+                                image_url = data["url"]
+                                chunk_message = f"![image]({image_url})"
+                                if chunk_message:
+                                    chunk_delta.role = "assistant"
+                                    chunk_delta.content = chunk_message
+                                    chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
 
                     if event == "message_end" and "metadata" in data:
                         metadata = data["metadata"]

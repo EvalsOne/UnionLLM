@@ -156,7 +156,6 @@ class FastGPTProvider(BaseProvider):
                 
             message_check_result = self.check_prompt("fastgpt", model, messages)    
             
-            print(message_check_result)        
             if message_check_result['pass_check']:
                 messages = message_check_result['messages']
             else:

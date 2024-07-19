@@ -91,7 +91,6 @@ class CozeAIProvider(BaseProvider):
             "Content-Type": "application/json",
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
-
         event_type = None
         index = 0
         for line in response.iter_lines():
@@ -123,7 +122,23 @@ class CozeAIProvider(BaseProvider):
                                 if "content" in data:
                                     chunk_delta.content = data["content"]
                                 chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
-                                                
+                    elif event_type=="conversation.message.completed":
+                        if "type" in data:
+                            message_type = data["type"]
+                            if message_type == "answer":
+                                chunk_choices = []
+                                chunk_delta = Delta()
+                                if "role" in data:
+                                    chunk_delta.role = data["role"]
+                                if "content" in data:
+                                    content_json = json.loads(data["content"])
+                                    if "content_type" in data and data["content_type"]=="image":
+                                        contents = json.loads(data["content"])
+                                        for content in contents:                                 
+                                            image_url = content['image_ori']['url']
+                                            image_markdown = f"![image]({image_url})"
+                                            chunk_delta.content = image_markdown
+                                            chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))                                                                                        
                     elif event_type=="conversation.chat.completed":
                         if "usage" in data and data["usage"]:
                             if "input_count" in data["usage"]:

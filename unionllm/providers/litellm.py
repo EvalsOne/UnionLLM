@@ -49,6 +49,7 @@ class LiteLLMProvider(BaseProvider):
                     status_code=422, message=f"Missing model or messages"
                 )
             new_kwargs = self.pre_processing(**kwargs)
+                        
             stream = kwargs.get("stream", False)
             if stream:
                 new_kwargs['stream_options'] = {"include_usage": True}

@@ -162,7 +162,6 @@ class CozeAIProvider(BaseProvider):
         context = []
 
         result_dict = result.json()
-        print(result_dict)
         messages = result_dict.get('messages', [])
         if not messages:
             code = result_dict.get('code', 500)
