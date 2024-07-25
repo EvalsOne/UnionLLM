@@ -131,7 +131,6 @@ class CozeAIProvider(BaseProvider):
                                 if "role" in data:
                                     chunk_delta.role = data["role"]
                                 if "content" in data:
-                                    content_json = json.loads(data["content"])
                                     if "content_type" in data and data["content_type"]=="image":
                                         contents = json.loads(data["content"])
                                         for content in contents:                                 

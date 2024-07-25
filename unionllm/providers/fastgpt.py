@@ -24,7 +24,7 @@ class FastGPTProvider(BaseProvider):
             raise FastGPTError(
                 status_code=422, message=f"Missing API key"
             )
-        self.base_url = "https://api.fastgpt.in/api/v1"
+        self.base_url = model_kwargs.get("api_base") if model_kwargs.get("api_base") else "https://api.fastgpt.in/api/v1"
         self.endpoint_url = self.base_url + "/chat/completions"
 
     def pre_processing(self, **kwargs):

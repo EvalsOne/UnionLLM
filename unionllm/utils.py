@@ -316,7 +316,7 @@ def generate_unique_uid():
     return unique_uid
 
 def check_object_input_support(provider):
-    not_supported_providers = ["wenxin", "baichuan", "minimax", "xunfei", "tiangong", "lingyi", "dify", "fastgpt", "doubao", "moonshot"]
+    not_supported_providers = ["wenxin", "baichuan", "minimax", "xunfei", "tiangong", "lingyi", "fastgpt", "doubao", "moonshot"]
     if provider in not_supported_providers:
         return "NONE"
     elif provider == "coze":
@@ -334,6 +334,8 @@ def check_vision_input_support(provider, model):
     supported_providers = ['zhipuai']
     if provider == "coze":
         return "PARTIAL"
+    elif provider == "dify":
+        return "FULL"
     elif provider not in supported_providers:
         return "NONE"
     

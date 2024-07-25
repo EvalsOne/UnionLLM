@@ -16,6 +16,8 @@ class DifyOpenAIError(Exception):
 
 class DifyAIProvider(BaseProvider):
     def __init__(self, **model_kwargs):
+        
+        print(model_kwargs)
         # Get DIFY_API_KEY from environment variables
         _env_api_key = os.environ.get("DIFY_API_KEY")
         self.api_key = model_kwargs.get("api_key") if model_kwargs.get("api_key") else _env_api_key
@@ -25,13 +27,14 @@ class DifyAIProvider(BaseProvider):
             raise DifyOpenAIError(
                 status_code=422, message=f"Missing API key"
             )
-        self.endpoint_url = "https://api.dify.ai/v1/chat-messages"
+        self.base_url = model_kwargs.get("api_base") if model_kwargs.get("api_base") else "https://api.dify.ai/v1"
+        self.endpoint_url = self.base_url+"/chat-messages"
 
     def pre_processing(self, **kwargs):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias"
+            "best_of", "logit_bias", "api_base"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
@@ -45,15 +48,37 @@ class DifyAIProvider(BaseProvider):
             raise DifyOpenAIError(
                 status_code=422, message=f"Last message role should be user"
             )
-        query = message["content"]
-        return messages, query
+        content = message["content"]
+        files = []
+        # 判断query是否是字符串
+        if isinstance(content, str): 
+            query = content
+            return messages, query, files
+        elif isinstance(content, list):
+            query = ""
+            for current_content in content:
+                if isinstance(current_content, dict):
+                    print(current_content)
+                    if current_content.get('type') == "text":
+                        query += current_content.get('text')
+                    elif current_content.get('type')== "image_url":
+                        this_file = {}
+                        this_file['transfer_method'] = "remote_url"
+                        this_file['type'] = "image"
+                        this_file['url'] = current_content.get("image_url").get("url")
+                        files.append(this_file)
+            return messages, query, files
+        else:
+            raise DifyOpenAIError(
+                status_code=422, message=f"Query should be a string"
+            )
 
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         # 预处理对话内容并返回最近的用户问题        
-        messages, query = self.to_formatted_prompt(messages)
+        messages, query, files = self.to_formatted_prompt(messages)
         mode = "streaming"
-        payload = {"query": query, "response_mode": mode, "user": self.user,"conversation_id": "","inputs":{}}
+        payload = {"query": query, "response_mode": mode, "user": self.user,"conversation_id": "","inputs":{}, "files": files}
         if self.conversation_id:
             payload["conversation_id"] = self.conversation_id
         payload = json.dumps(payload)
@@ -199,10 +224,10 @@ class DifyAIProvider(BaseProvider):
             if stream:
                 return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
             else:
-                messages, query = self.to_formatted_prompt(messages)
+                messages, query, files = self.to_formatted_prompt(messages)
                 mode = "blocking"
 
-                payload = {"query": query, "response_mode": mode, "user": self.user,"conversation_id": "","inputs":{}}
+                payload = {"query": query, "response_mode": mode, "user": self.user,"conversation_id": "","inputs":{}, "files": files}
                 if self.conversation_id:
                     payload["conversation_id"] = self.conversation_id
                 payload = json.dumps(payload)
