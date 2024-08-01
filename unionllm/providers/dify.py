@@ -15,9 +15,7 @@ class DifyOpenAIError(Exception):
         super().__init__(self.message)
 
 class DifyAIProvider(BaseProvider):
-    def __init__(self, **model_kwargs):
-        
-        print(model_kwargs)
+    def __init__(self, **model_kwargs):        
         # Get DIFY_API_KEY from environment variables
         _env_api_key = os.environ.get("DIFY_API_KEY")
         self.api_key = model_kwargs.get("api_key") if model_kwargs.get("api_key") else _env_api_key
@@ -27,7 +25,8 @@ class DifyAIProvider(BaseProvider):
             raise DifyOpenAIError(
                 status_code=422, message=f"Missing API key"
             )
-        self.base_url = model_kwargs.get("api_base") if model_kwargs.get("api_base") else "https://api.dify.ai/v1"
+        _env_dify_base = os.environ.get("DIFY_API_BASE") if os.environ.get("DIFY_API_BASE") else "https://api.dify.ai/v1"
+        self.base_url = model_kwargs.get("api_base") if model_kwargs.get("api_base") else _env_dify_base
         self.endpoint_url = self.base_url+"/chat-messages"
 
     def pre_processing(self, **kwargs):
@@ -58,7 +57,6 @@ class DifyAIProvider(BaseProvider):
             query = ""
             for current_content in content:
                 if isinstance(current_content, dict):
-                    print(current_content)
                     if current_content.get('type') == "text":
                         query += current_content.get('text')
                     elif current_content.get('type')== "image_url":
@@ -89,10 +87,11 @@ class DifyAIProvider(BaseProvider):
         }
         response = requests.post(self.endpoint_url, headers=headers, data=payload)
 
-        chunk_usage = Usage()
         index = 0
         for line in response.iter_lines():
+            chunk_usage = Usage()
             if line:
+                # print("Dify Stream Response:", line)
                 chunk_choices = []
                 chunk_context = []
                 chunk_delta = Delta()
@@ -106,7 +105,7 @@ class DifyAIProvider(BaseProvider):
                     event = data.get("event")
                     msg_id = data.get("message_id")
                     conversation_id = data.get("conversation_id")
-                    if event == "agent_message":
+                    if event == "agent_message" or event == "message":
                         if 'answer' in data:
                             chunk_message = data["answer"]
                             if chunk_message:
@@ -122,8 +121,15 @@ class DifyAIProvider(BaseProvider):
                                     chunk_delta.role = "assistant"
                                     chunk_delta.content = chunk_message
                                     chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
-
-                    if event == "message_end" and "metadata" in data:
+                    elif event == "node_finished":
+                        node_data = data.get("data")
+                        if 'execution_metadata' in node_data:
+                            execution_metadata = node_data['execution_metadata']
+                            if node_data['execution_metadata'] and 'total_price' in execution_metadata:
+                                chunk_usage.total_tokens = execution_metadata['total_tokens']
+                                chunk_usage.total_cost = execution_metadata['total_price']
+                                chunk_usage.cost_unit = execution_metadata['currency']
+                    elif event == "message_end" and "metadata" in data:
                         metadata = data["metadata"]
                         if "usage" in metadata:
                             usage_info = metadata["usage"]
@@ -133,6 +139,10 @@ class DifyAIProvider(BaseProvider):
                                 chunk_usage.completion_tokens = usage_info["completion_tokens"]
                             if "total_tokens" in usage_info:
                                 chunk_usage.total_tokens = usage_info["total_tokens"]
+                            if "total_price" in usage_info:
+                                chunk_usage.total_cost = usage_info["total_price"]
+                            if "currency" in usage_info:
+                                chunk_usage.cost_unit = usage_info["currency"]
 
                         if 'retriever_resources' in metadata:
                             for resource in metadata['retriever_resources']:
@@ -159,6 +169,14 @@ class DifyAIProvider(BaseProvider):
         response_dict = result.json()
         choices = []
         context = []
+        
+        # print("Dify response:", response_dict)
+
+        answer = response_dict.get('answer', None)
+        if not answer:
+            code = response_dict.get('code', 500)
+            message = response_dict.get('message', response_dict.get('error', 'Unknown error'))
+            raise DifyOpenAIError(status_code=code, message=message)
 
         message = Message(
             content=response_dict['answer'], role="assistant"
@@ -171,10 +189,11 @@ class DifyAIProvider(BaseProvider):
             )
         )
 
+        usage_tokens = response_dict['metadata']["usage"]
         usage = Usage(
-            prompt_tokens=response_dict['metadata']["usage"]["prompt_tokens"],
-            completion_tokens=response_dict['metadata']["usage"]["completion_tokens"],
-            total_tokens=response_dict['metadata']["usage"]["total_tokens"],
+            prompt_tokens=usage_tokens["prompt_tokens"] if 'prompt_tokens' in usage_tokens else 0,
+            completion_tokens=usage_tokens["completion_tokens"] if 'completion_tokens' in usage_tokens else 0,
+            total_tokens=usage_tokens["total_tokens"] if 'total_tokens' in usage_tokens else 0
         )
 
         if 'retriever_resources' in response_dict['metadata']:
