@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from ..models import ResponseModel
 from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, List
-from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, check_object_input_support, check_vision_input_support, reformat_object_content, check_file_input_support
+from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, check_object_input_support, check_video_input_support, check_vision_input_support, reformat_object_content, check_file_input_support
 
 import openai
 import json
@@ -34,6 +34,7 @@ class BaseProvider(ABC):
         has_middle_system = False
         has_object_content = False
         has_vision_input = False
+        has_video_input = False
         has_file_input = False
         for i, message in enumerate(messages):
             if message.get("role") == "system":
@@ -50,6 +51,11 @@ class BaseProvider(ABC):
                             if content.get("type") == "image_url":
                                 if content.get("image_url").get("url"):
                                     has_vision_input = True
+                                else:
+                                    is_invalid_format = True
+                            elif content.get("type") == "video_url":
+                                if content.get("video_url").get("url"):
+                                    has_video_input = True
                                 else:
                                     is_invalid_format = True
                             elif content.get("type") == "file_url":
@@ -78,13 +84,13 @@ class BaseProvider(ABC):
                 # 如果支持
                 reformat_image = 0
                 reformat_file = 0
+                reformat_video = 0
                 if object_support == "PARTIAL":
                     # 如果部分支持，则需要将object content转为文本
                     reformated = 1
                 if has_vision_input:
                     # 如果包含图片
                     vision_input_support = check_vision_input_support(provider, model)
-                    
                     if vision_input_support == "PARTIAL":
                         # 如果图片是部分支持，则需要将图片转为文本
                         reformat_image = 1
@@ -92,6 +98,16 @@ class BaseProvider(ABC):
                     elif vision_input_support == "NONE":
                         # 如果图片不支持，则返回错误信息
                         return {"pass_check": False, "reformatted": False, "reason": "Vision input is not supported"}
+                
+                if has_video_input:
+                    video_input_support = check_video_input_support(provider, model)
+                    if video_input_support == "PARTIAL":
+                        # 如果视频是部分支持，则需要将视频转为文本
+                        reformat_video = 1
+                        reformated = 1
+                    elif video_input_support == "NONE":
+                        # 如果视频不支持，则返回错误信息
+                        return {"pass_check": False, "reformatted": False, "reason": "Video input is not supported"}
                     
                 if has_file_input:
                     # 如果包含文件
@@ -103,8 +119,8 @@ class BaseProvider(ABC):
                     elif file_input_support == "NONE":
                         # 如果文件不支持，则返回错误信息
                         return {"pass_check": False, "reformatted": False, "messages": messages, "reason": "File input is not supported"}
-                if reformated or reformat_image or reformat_file:
-                    messages = reformat_object_content(messages, 1, reformat_image, reformat_file)
+                if reformated or reformat_image or reformat_file or reformat_video:
+                    messages = reformat_object_content(messages, 1, reformat_image, reformat_file, reformat_video)
                 
         return {"pass_check": True, "reformatted": reformated, "messages": messages}         
 

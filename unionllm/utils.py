@@ -340,7 +340,7 @@ def check_vision_input_support(provider, model):
         return "NONE"
     
     supported_models = [
-        {"zhipuai": ["glm-4v"]}
+        {"zhipuai": ["glm-4v", "glm-4v-plus"]}
     ]
     
     for entry in supported_models:
@@ -349,7 +349,24 @@ def check_vision_input_support(provider, model):
                 return "FULL"    
     return "NONE"
 
-def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False):
+def check_video_input_support(provider, model):
+    supported_providers = ['zhipuai']
+    if provider == "coze":
+        return "PARTIAL"
+    elif provider not in supported_providers:
+        return "NONE"
+
+    supported_models = [
+        {"zhipuai": ["glm-4v-plus"]}
+    ]
+    
+    for entry in supported_models:
+        if provider in entry:
+            if model in entry[provider]:
+                return "FULL"    
+    return "NONE"
+
+def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False):
     formatted_messages = []
     for message in messages:
         new_formatted_message = {}
@@ -369,6 +386,13 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
                         return False
                     elif content.get("image_url") and content.get("image_url").get("url"):
                         new_formatted_message["content"] += f"![image]({content.get('image_url').get('url')})"
+                    else:
+                        return False
+                elif content_type == "video_url":
+                    if not reformat_video:
+                        return False
+                    elif content.get("video_url") and content.get("video_url").get("url"):
+                        new_formatted_message["content"] += f"![video]({content.get('video_url').get('url')})"
                     else:
                         return False
                 elif content_type == "file_url":
