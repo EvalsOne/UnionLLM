@@ -8,7 +8,7 @@ UnionLLM是一个通过与OpenAI兼容的统一方式调用各种国内外各种
 
 UnionLLM目前支持的国内大语言模型包括：
 - 智谱AI
-- 月之暗面Moonshot
+- 月之暗面 Moonshot
 - 百度文心一言
 - 阿里巴巴通义千问
 - MiniMax
@@ -18,6 +18,7 @@ UnionLLM目前支持的国内大语言模型包括：
 - 零一万物
 - 阶跃星辰
 - 字节豆包
+- 深度求索 DeepSeek
 
 UnionLLM目前支持的Agent编排工具包括：
 - Coze
@@ -76,7 +77,7 @@ ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', i
 
 以下是每一种大语言模型的调用方式的详细文档：
 - [智谱AI](docs/zhipuai.md)
-- [月之暗面Moonshot](docs/moonshot.md)
+- [月之暗面 Moonshot](docs/moonshot.md)
 - [百度文心一言](docs/baidu.md)
 - [阿里通义千问](docs/qwen.md)
 - [MiniMax](docs/minimax.md)
@@ -89,6 +90,7 @@ ModelResponse(id='8635254124951169203', choices=[Choices(finish_reason='stop', i
 - [FastGPT](docs/fastgpt.md)
 - [Dify](docs/dify.md)
 - [字节豆包](docs/doubao.md)
+- [深度求索 DeepSeek](docs/deepseek.md)
 - [通过LiteLLM调用其他大模型](docs/litellm.md)
 
 UnionLLM目前提供的功能包括：

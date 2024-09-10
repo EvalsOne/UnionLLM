@@ -38,11 +38,7 @@ class DouBaoAIProvider(BaseProvider):
         return kwargs
 
     def to_formatted_prompt(self, messages):
-        if messages and messages[0].get('role') == 'system':
-            system = messages.pop(0).get('content')
-        else:
-            system = None
-        return messages, system
+        return messages
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
@@ -134,9 +130,7 @@ class DouBaoAIProvider(BaseProvider):
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 
-            messages, system = self.to_formatted_prompt(messages)
-            if system:
-                new_kwargs["system"] = system
+            messages = self.to_formatted_prompt(messages)
 
             self.model_path = model
 

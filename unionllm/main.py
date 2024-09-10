@@ -3,7 +3,7 @@ import asyncio
 from functools import partial
 
 from typing import Any, List
-from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao
+from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
 from typing import Optional
@@ -42,6 +42,8 @@ class UnionLLM:
             self.provider_instance = stepfun.StepfunAIProvider(**kwargs)
         elif self.provider == "doubao":
             self.provider_instance = doubao.DouBaoAIProvider(**kwargs)
+        elif self.provider == "deepseek":
+            self.provider_instance = deepseek.DeepSeekAIProvider(**kwargs)
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
