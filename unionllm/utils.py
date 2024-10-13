@@ -89,7 +89,6 @@ class Choices(OpenAIObject):
         # Allow dictionary-style assignment of attributes
         setattr(self, key, value)
 
-
 class Usage(OpenAIObject):
     def __init__(
         self, prompt_tokens=None, completion_tokens=None, total_tokens=None, **params
@@ -101,7 +100,7 @@ class Usage(OpenAIObject):
             self.completion_tokens = completion_tokens
         if total_tokens:
             self.total_tokens = total_tokens
-
+        
     def __contains__(self, key):
         # Define custom behavior for the 'in' operator
         return hasattr(self, key)
@@ -241,6 +240,7 @@ class ModelResponse(OpenAIObject):
             _response_ms = response_ms
         if not usage:
             usage = Usage()
+        
         if hidden_params:
             self._hidden_params = hidden_params
 
@@ -325,10 +325,13 @@ def check_object_input_support(provider):
         return "FULL"
 
 def check_file_input_support(provider, model):
+    # supported_providers = ["openai", "anthropic", "claude"]
     if provider == "coze":
         return "PARTIAL"
+    # elif provider in supported_providers:
+    #     return "PARTIAL"
     else:
-        return "NONE"
+        return "PARTIAL"
 
 def check_vision_input_support(provider, model):
     supported_providers = ['zhipuai']
@@ -403,4 +406,6 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
                     else:
                         return False
             formatted_messages.append(new_formatted_message)   
+        else:
+            formatted_messages.append(message)
     return formatted_messages

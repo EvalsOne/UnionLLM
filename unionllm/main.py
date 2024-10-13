@@ -3,7 +3,7 @@ import asyncio
 from functools import partial
 
 from typing import Any, List
-from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek
+from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
 from typing import Optional
@@ -30,6 +30,8 @@ class UnionLLM:
             self.provider_instance = wenxin.WenXinAIProvider(**kwargs)
         elif self.provider == "xunfei":
             self.provider_instance = xunfei.XunfeiAIProvider(**kwargs)
+        elif self.provider == "xunfei_http":
+            self.provider_instance = xunfei_http.XunfeiHTTPProvider(**kwargs)
         elif self.provider == "dify":
             self.provider_instance = dify.DifyAIProvider(**kwargs)
         elif self.provider == "fastgpt":

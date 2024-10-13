@@ -144,11 +144,10 @@ class BaseProvider(ABC):
                 )
             )
 
-        usage = Usage(
-            prompt_tokens=openai_response.usage.prompt_tokens,
-            completion_tokens=openai_response.usage.completion_tokens,
-            total_tokens=openai_response.usage.total_tokens,
-        )
+        # 把Usage对象里面的其他属性也添加到Usage对象中
+        usage_dict = openai_response.usage.model_dump()
+        usage = Usage(**usage_dict)
+
         response = ModelResponse(
             id=openai_response.id,
             choices=choices,
@@ -195,12 +194,9 @@ class BaseProvider(ABC):
             if "usage" in data:
                 chunk_usage = Usage()
                 if data["usage"]:
-                    if "prompt_tokens" in data["usage"]:
-                        chunk_usage.prompt_tokens = data["usage"]["prompt_tokens"]
-                    if "completion_tokens" in data["usage"]:
-                        chunk_usage.completion_tokens = data["usage"]["completion_tokens"]
-                    if "total_tokens" in data["usage"]:
-                        chunk_usage.total_tokens = data["usage"]["total_tokens"]
+                    # 把usage字典中的数据添加到chunk_usage中
+                    for key, value in data["usage"].items():
+                        setattr(chunk_usage, key, value)
             
             chunk_response = ModelResponse(
                 id=data["id"],

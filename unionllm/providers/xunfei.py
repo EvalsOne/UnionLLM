@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 from wsgiref.handlers import format_date_time
 from unionllm.utils import ModelResponse, Message, Choices, Usage
 
-class XunfeiOpenAIError(Exception):
+class XunfeiSocksError(Exception):
     def __init__(self, status_code, message):
         self.status_code = status_code
         self.message = message
@@ -170,7 +170,7 @@ class XunfeiAIProvider(BaseProvider):
         self.api_key = model_kwargs.get("api_key") if model_kwargs.get("api_key") else _env_api_key
         self.api_secret = model_kwargs.get("api_secret") if model_kwargs.get("api_secret") else _env_api_secret
         if not self.app_id or not self.app_id or not self.api_secret:
-            raise XunfeiOpenAIError(
+            raise XunfeiSocksError(
                 status_code=422, message=f"Missing app_id, api_key or api_secret"
             )
 
@@ -229,7 +229,7 @@ class XunfeiAIProvider(BaseProvider):
     def completion(self, model: str, messages: list, **kwargs):
         try:
             if model is None or messages is None:
-                raise XunfeiOpenAIError(
+                raise XunfeiSocksError(
                     status_code=422, message="Missing model or messages"
                 )
                 
@@ -237,7 +237,7 @@ class XunfeiAIProvider(BaseProvider):
             if message_check_result['pass_check']:
                 messages = message_check_result['messages']
             else:
-                raise XunfeiOpenAIError(
+                raise XunfeiSocksError(
                     status_code=422, message=message_check_result['reason']
                 )
                 
@@ -246,11 +246,11 @@ class XunfeiAIProvider(BaseProvider):
             client = XunfeiWebSocketClient(self.app_id, self.api_key, self.api_secret, model, **new_kwargs)
             answer, usage, error = client.connect(messages)
             if error:
-                raise XunfeiOpenAIError(status_code=500, message=error)
+                raise XunfeiSocksError(status_code=500, message=error)
             return self.create_model_response_wrapper(answer, usage, model=model)
         
         except Exception as e:
             if hasattr(e, "status_code"):
-                raise XunfeiOpenAIError(status_code=e.status_code, message=str(e))
+                raise XunfeiSocksError(status_code=e.status_code, message=str(e))
             else:
-                raise XunfeiOpenAIError(status_code=500, message=str(e))
+                raise XunfeiSocksError(status_code=500, message=str(e))
