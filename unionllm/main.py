@@ -3,7 +3,7 @@ import asyncio
 from functools import partial
 
 from typing import Any, List
-from .providers import zhipu, moonshot, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek
+from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
 from typing import Optional
@@ -32,6 +32,8 @@ class UnionLLM:
             self.provider_instance = xunfei.XunfeiAIProvider(**kwargs)
         elif self.provider == "xunfei_http":
             self.provider_instance = xunfei_http.XunfeiHTTPProvider(**kwargs)
+        # elif self.provider == "xai":
+        #     self.provider_instance = xai.XAIHTTPProvider(**kwargs)
         elif self.provider == "dify":
             self.provider_instance = dify.DifyAIProvider(**kwargs)
         elif self.provider == "fastgpt":
@@ -54,6 +56,8 @@ class UnionLLM:
                     self.litellm_call_type = 1
                 elif support_type == 2:
                     self.litellm_call_type = 2
+                elif support_type == 3:
+                    self.litellm_call_type = 3
             else:
                 raise ProviderError(f"Provider '{self.provider}' is not supported.")
         else:
@@ -63,13 +67,20 @@ class UnionLLM:
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
         if self.litellm_call_type:
+            print("call type:", self.litellm_call_type)
             if self.litellm_call_type == 1:
                 # Jugde whether the model starts with self.provider, if not, add it
                 if not model.startswith(self.provider+"/"):
-                    model = f"{self.provider}/{model}"
-                    
+                    model = f"{self.provider}/{model}"     
                 return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 2:
+                return self.provider_instance.completion(model, messages, **kwargs)
+            elif self.litellm_call_type == 3:
+                # append OpenAI as provider name
+                if self.provider == 'xai':
+                    kwargs['api_base'] = "https://api.x.ai/v1"
+                model = f"openai/{model}"
+                print("model:", model)
                 return self.provider_instance.completion(model, messages, **kwargs)
         else:
             return self.provider_instance.completion(model, messages, **kwargs)
@@ -100,6 +111,9 @@ class UnionLLM:
         elif provider in ['openai', 'cohere', 'ai21', 'deepseek', 'deepinfra', 'ai21', 'alpha_alpha']:
             # provider name should not be added to the model name
             return True, 2
+        elif provider in ['xai']:
+            # append OpenAI as procall as OpenAI campatible API
+            return True, 3
         else:
             return False, 0
         

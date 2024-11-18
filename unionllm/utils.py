@@ -148,6 +148,7 @@ class StreamingChoices(OpenAIObject):
         self, finish_reason=None, index=0, delta: Optional[Delta] = None, **params
     ):
         super(StreamingChoices, self).__init__(**params)
+
         self.finish_reason = finish_reason
         self.index = index
         if delta:
@@ -334,40 +335,44 @@ def check_file_input_support(provider, model):
         return "PARTIAL"
 
 def check_vision_input_support(provider, model):
-    supported_providers = ['zhipuai']
+    # supported_providers = ['zhipuai']
     if provider == "coze":
         return "PARTIAL"
     elif provider == "dify":
         return "FULL"
-    elif provider not in supported_providers:
-        return "NONE"
+    else:
+        # 默认支持，不做限制
+        return "FULL"
     
-    supported_models = [
-        {"zhipuai": ["glm-4v", "glm-4v-plus"]}
-    ]
+    # supported_models = [
+    #     {"zhipuai": ["glm-4v", "glm-4v-plus"]}
+    # ]
     
-    for entry in supported_models:
-        if provider in entry:
-            if model in entry[provider]:
-                return "FULL"    
-    return "NONE"
+    # for entry in supported_models:
+    #     if provider in entry:
+    #         if model in entry[provider]:
+    #             return "FULL"    
+    # return "NONE"
 
 def check_video_input_support(provider, model):
-    supported_providers = ['zhipuai']
+    # supported_providers = ['zhipuai']
     if provider == "coze":
         return "PARTIAL"
-    elif provider not in supported_providers:
-        return "NONE"
+    # elif provider not in supported_providers:
+    #     return "NONE"
+    else:
+        # 默认支持，不做限制
+        return "FULL"
 
-    supported_models = [
-        {"zhipuai": ["glm-4v-plus"]}
-    ]
+    # supported_models = [
+    #     {"zhipuai": ["glm-4v-plus"]}
+    # ]
     
-    for entry in supported_models:
-        if provider in entry:
-            if model in entry[provider]:
-                return "FULL"    
-    return "NONE"
+    # for entry in supported_models:
+    #     if provider in entry:
+    #         if model in entry[provider]:
+    #             return "FULL"    
+    # return "NONE"
 
 def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False):
     formatted_messages = []

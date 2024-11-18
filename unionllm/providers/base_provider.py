@@ -184,7 +184,7 @@ class BaseProvider(ABC):
                             if "tool_calls" in choice['delta']:
                                 chunk_delta.tool_calls = choice['delta']["tool_calls"]
                             
-                            stream_choices = StreamingChoices(index=choice['index'], delta=chunk_delta)
+                            stream_choices = StreamingChoices(index=choice['index'], delta=chunk_delta, finish_reason=choice.get("finish_reason"))
                             # 遍历choices字典中的key, 如果在特定的列表中，则添加到stream_choices中
                             for key in choice.keys():
                                 if key in ["content_filter_results", "content_filter_offsets", "logprobs"]:
