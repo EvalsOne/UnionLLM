@@ -391,21 +391,24 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
                         new_formatted_message["content"] += content.get("text")
                 elif content_type in ["image_url","image"]:
                     if not reformat_image:
-                        return False
+                        formatted_messages.append(message)
+                        continue
                     elif content.get("image_url") and content.get("image_url").get("url"):
                         new_formatted_message["content"] += f"![image]({content.get('image_url').get('url')})"
                     else:
                         return False
                 elif content_type == "video_url":
                     if not reformat_video:
-                        return False
+                        formatted_messages.append(message)
+                        continue
                     elif content.get("video_url") and content.get("video_url").get("url"):
                         new_formatted_message["content"] += f"![video]({content.get('video_url').get('url')})"
                     else:
                         return False
                 elif content_type == "file_url":
                     if not reformat_file:
-                        return False
+                        formatted_messages.append(message)
+                        continue
                     elif content.get("file_url") and content.get("file_url").get("url"):
                         new_formatted_message["content"] += f"[file]({content.get('file_url').get('url')})"
                     else:

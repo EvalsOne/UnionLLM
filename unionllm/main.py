@@ -67,7 +67,6 @@ class UnionLLM:
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
         if self.litellm_call_type:
-            print("call type:", self.litellm_call_type)
             if self.litellm_call_type == 1:
                 # Jugde whether the model starts with self.provider, if not, add it
                 if not model.startswith(self.provider+"/"):
@@ -80,7 +79,6 @@ class UnionLLM:
                 if self.provider == 'xai':
                     kwargs['api_base'] = "https://api.x.ai/v1"
                 model = f"openai/{model}"
-                print("model:", model)
                 return self.provider_instance.completion(model, messages, **kwargs)
         else:
             return self.provider_instance.completion(model, messages, **kwargs)
