@@ -160,6 +160,7 @@ class BaseProvider(ABC):
     def post_stream_processing(self, response, model=None):
         for chunk in response:
             data = chunk.json()
+            # print(data)
             if isinstance(data, str):
                 data = json.loads(data)
             if 'choices' in data:

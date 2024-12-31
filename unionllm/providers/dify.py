@@ -91,7 +91,6 @@ class DifyAIProvider(BaseProvider):
         for line in response.iter_lines():
             chunk_usage = Usage()
             if line:
-                # print("Dify Stream Response:", line)
                 chunk_choices = []
                 chunk_context = []
                 chunk_delta = Delta()
