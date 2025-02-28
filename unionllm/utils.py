@@ -377,9 +377,10 @@ def check_video_input_support(provider, model):
 def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False):
     formatted_messages = []
     for message in messages:
-        new_formatted_message = {}
+        # 保留原始消息的所有字段（包括tool_call_id和name）
+        new_formatted_message = {k: v for k, v in message.items() if k != 'content'}
+        
         if isinstance(message.get("content"), list):
-            new_formatted_message["role"] = message.get("role")
             new_formatted_message["content"] = ""
             message_contents = message.get("content")            
             for content in message_contents:

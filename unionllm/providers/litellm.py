@@ -46,6 +46,9 @@ class LiteLLMProvider(BaseProvider):
             if 'provider' in kwargs:
                 provider = kwargs['provider']
                 kwargs.pop('provider')
+            else:
+                # 如果provider没有传入，则从model中提取provider
+                provider = model.split('/')[0]
             if model is None or messages is None:
                 raise LiteLLMError(
                     status_code=422, message=f"Missing model or messages"
@@ -63,7 +66,8 @@ class LiteLLMProvider(BaseProvider):
                         
             stream = kwargs.get("stream", False)
             if stream:
-                new_kwargs['stream_options'] = {"include_usage": True}
+                if provider not in ['azure_ai']:
+                    new_kwargs['stream_options'] = {"include_usage": True}
                 return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             else:
                 result = completion(

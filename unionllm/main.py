@@ -103,7 +103,7 @@ class UnionLLM:
 
     def check_litellm_providers(self, provider: str) -> bool:
         # Judge whether the provider is supported by LiteLLM, and if provider name should be added to the model name
-        if provider in ['azure', 'anthropic', 'deepseek', 'sagemaker', 'bedrock', 'vertex_ai', 'vertex_ai_beta', 'palm', 'gemini', 'mistral', 'cloudflare', 'huggingface', 'replicate', 'together_ai', 'openrouter', 'baseten', 'nlp_cloud', 'petals', 'ollama', 'perplexity', 'groq', 'anyscale', 'watsonx', 'voyage', 'xinference']:
+        if provider in ['azure', 'azure_ai', 'anthropic', 'deepseek', 'sagemaker', 'bedrock', 'vertex_ai', 'vertex_ai_beta', 'palm', 'gemini', 'mistral', 'cloudflare', 'huggingface', 'replicate', 'together_ai', 'openrouter', 'baseten', 'nlp_cloud', 'petals', 'ollama', 'perplexity', 'groq', 'anyscale', 'watsonx', 'voyage', 'xinference']:
             # provider name should be added to the model name
             return True, 1
         elif provider in ['openai', 'cohere', 'ai21', 'deepinfra', 'ai21', 'alpha_alpha']:

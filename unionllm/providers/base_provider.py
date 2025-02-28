@@ -63,6 +63,13 @@ class BaseProvider(ABC):
                                     has_file_input = True
                                 else:
                                     is_invalid_format = True
+                            # 新增对tool角色的特殊处理
+                            if message.get("role") == "tool":
+                                # 保留tool_call_id和name字段
+                                if "tool_call_id" in message:
+                                    message["tool_call_id"] = message["tool_call_id"]
+                                if "name" in message:
+                                    message["name"] = message["name"]
                                                                       
         if is_invalid_format:
             return {"pass_check": False, "reformatted": False, "reason": "Invalid message format"}
@@ -120,7 +127,13 @@ class BaseProvider(ABC):
                         # 如果文件不支持，则返回错误信息
                         return {"pass_check": False, "reformatted": False, "messages": messages, "reason": "File input is not supported"}
                 if reformated or reformat_image or reformat_file or reformat_video:
-                    messages = reformat_object_content(messages, 1, reformat_image, reformat_file, reformat_video)
+                    messages = reformat_object_content(
+                        messages, 
+                        True,  # 新增参数保留tool元数据
+                        reformat_image=reformat_image,
+                        reformat_file=reformat_file,
+                        reformat_video=reformat_video
+                    )
                 
         return {"pass_check": True, "reformatted": reformated, "messages": messages}         
 
@@ -138,6 +151,10 @@ class BaseProvider(ABC):
                 message = Message(content=choice.message.content, role=choice.message.role, tool_calls=tool_calls)
             else:
                 message = Message(content=choice.message.content, role=choice.message.role)
+            # 如果choise.message中还包含其他属性，则追加进来
+            for key in choice.message.model_dump():
+                if key not in ["content", "role", "tool_calls"]:
+                    setattr(message, key, choice.message[key])
             choices.append(
                 Choices(
                     message=message, index=choice.index, finish_reason=choice.finish_reason
@@ -160,7 +177,6 @@ class BaseProvider(ABC):
     def post_stream_processing(self, response, model=None):
         for chunk in response:
             data = chunk.json()
-            # print(data)
             if isinstance(data, str):
                 data = json.loads(data)
             if 'choices' in data:
@@ -184,6 +200,10 @@ class BaseProvider(ABC):
                                 chunk_delta.content = choice['delta']["content"]
                             if "tool_calls" in choice['delta']:
                                 chunk_delta.tool_calls = choice['delta']["tool_calls"]
+                            # 如果choice.message中还包含其他属性，则追加进来
+                            for key in choice['delta']:
+                                if key not in ["content", "role", "tool_calls"]:
+                                    setattr(chunk_delta, key, choice['delta'][key])
                             
                             stream_choices = StreamingChoices(index=choice['index'], delta=chunk_delta, finish_reason=choice.get("finish_reason"))
                             # 遍历choices字典中的key, 如果在特定的列表中，则添加到stream_choices中
