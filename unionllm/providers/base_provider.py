@@ -145,7 +145,6 @@ class BaseProvider(ABC):
         for choice in openai_response.choices:
             # 假设choice.message.tool_calls存在
             tool_calls = getattr(choice.message, 'tool_calls', None)
-
             # 创建Message对象时，仅当tool_calls存在时才添加tool_calls属性
             if tool_calls:
                 message = Message(content=choice.message.content, role=choice.message.role, tool_calls=tool_calls)
@@ -154,17 +153,15 @@ class BaseProvider(ABC):
             # 如果choise.message中还包含其他属性，则追加进来
             for key in choice.message.model_dump():
                 if key not in ["content", "role", "tool_calls"]:
-                    setattr(message, key, choice.message[key])
+                    setattr(message, key, getattr(choice.message, key))
             choices.append(
                 Choices(
                     message=message, index=choice.index, finish_reason=choice.finish_reason
                 )
             )
-
         # 把Usage对象里面的其他属性也添加到Usage对象中
         usage_dict = openai_response.usage.model_dump()
         usage = Usage(**usage_dict)
-
         response = ModelResponse(
             id=openai_response.id,
             choices=choices,

@@ -46,8 +46,8 @@ class UnionLLM:
             self.provider_instance = stepfun.StepfunAIProvider(**kwargs)
         elif self.provider == "doubao":
             self.provider_instance = doubao.DouBaoAIProvider(**kwargs)
-        # elif self.provider == "deepseek":
-        #     self.provider_instance = deepseek.DeepSeekAIProvider(**kwargs)
+        elif self.provider == "deepseek":
+            self.provider_instance = deepseek.DeepSeekAIProvider(**kwargs)
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
