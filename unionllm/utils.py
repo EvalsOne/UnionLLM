@@ -364,16 +364,6 @@ def check_video_input_support(provider, model):
         # 默认支持，不做限制
         return "FULL"
 
-    # supported_models = [
-    #     {"zhipuai": ["glm-4v-plus"]}
-    # ]
-    
-    # for entry in supported_models:
-    #     if provider in entry:
-    #         if model in entry[provider]:
-    #             return "FULL"    
-    # return "NONE"
-
 def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False):
     formatted_messages = []
     for message in messages:
@@ -418,3 +408,63 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
         else:
             formatted_messages.append(message)
     return formatted_messages
+
+class Function(OpenAIObject):
+    def __init__(
+        self,
+        name=None,
+        description=None,
+        parameters=None,
+        **params
+    ):
+        super(Function, self).__init__(**params)
+        if name:
+            self.name = name
+        if description:
+            self.description = description
+        if parameters:
+            self.parameters = parameters
+
+    def __contains__(self, key):
+        # Define custom behavior for the 'in' operator
+        return hasattr(self, key)
+
+    def get(self, key, default=None):
+        # Custom .get() method to access attributes with a default value if the attribute doesn't exist
+        return getattr(self, key, default)
+
+    def __getitem__(self, key):
+        # Allow dictionary-style access to attributes
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        # Allow dictionary-style assignment of attributes
+        setattr(self, key, value)
+
+class ChatCompletionMessageToolCall(OpenAIObject):
+    def __init__(
+        self,
+        id=None,
+        type=None,
+        function=None,
+        **params
+    ):
+        super(ChatCompletionMessageToolCall, self).__init__(**params)
+        if id:
+            self.id = id
+        if type:
+            self.type = type
+        if function:
+            self.function = function
+
+    def __contains__(self, key):
+        return hasattr(self, key)
+
+    def get(self, key, default=None):
+        return getattr(self, key, default)
+
+    def __getitem__(self, key):
+        return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        setattr(self, key, value)

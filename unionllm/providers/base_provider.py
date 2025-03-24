@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from ..models import ResponseModel
-from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, List
-from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, check_object_input_support, check_video_input_support, check_vision_input_support, reformat_object_content, check_file_input_support
+from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, List, Union
+from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, Function, ChatCompletionMessageToolCall, check_object_input_support, check_video_input_support, check_vision_input_support, reformat_object_content, check_file_input_support
 
 import openai
 import json
+import inspect
 from openai._models import BaseModel as OpenAIObject
 
 # if TYPE_CHECKING:
@@ -137,38 +138,87 @@ class BaseProvider(ABC):
                 
         return {"pass_check": True, "reformatted": reformated, "messages": messages}         
 
+    def convert_object_to_dict(self, obj):
+        """将任何对象递归转换为纯字典/列表结构"""
+        if hasattr(obj, "model_dump"):
+            return self.convert_object_to_dict(obj.model_dump())
+        elif hasattr(obj, "dict"):
+            return self.convert_object_to_dict(obj.dict())
+        elif hasattr(obj, "__dict__") and not isinstance(obj, type):
+            return self.convert_object_to_dict(obj.__dict__)
+        elif isinstance(obj, dict):
+            return {k: self.convert_object_to_dict(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self.convert_object_to_dict(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self.convert_object_to_dict(item) for item in obj)
+        else:
+            # 基本类型(str, int, float, bool, None)直接返回
+            return obj
+
     def create_model_response(
         self, openai_response: openai.ChatCompletion, model: str
     ) -> ModelResponse:
         choices = []
-        
         for choice in openai_response.choices:
-            # 假设choice.message.tool_calls存在
             tool_calls = getattr(choice.message, 'tool_calls', None)
+            
+            # 将tool_calls转换为可JSON序列化的标准Python数据结构，但保持结构
+            if tool_calls:
+                # 先转换为字典结构
+                tool_calls_dicts = self.convert_object_to_dict(tool_calls)
+                # 再转换回正确的对象结构
+                structured_tool_calls = []
+                for tool_call_dict in tool_calls_dicts:
+                    # 确保按照OpenAI的结构重建对象
+                    if "function" in tool_call_dict:
+                        # 创建function对象，使用我们自定义的Function类
+                        function_dict = tool_call_dict.get("function", {})
+                        function_obj = Function(**function_dict)
+                        
+                        # 创建完整的tool_call对象，使用ChatCompletionMessageToolCall
+                        tool_call = ChatCompletionMessageToolCall(
+                            id=tool_call_dict.get("id"),
+                            type=tool_call_dict.get("type"),
+                            function=function_obj
+                        )
+                        structured_tool_calls.append(tool_call)
+                
+                tool_calls = structured_tool_calls
+            
             # 创建Message对象时，仅当tool_calls存在时才添加tool_calls属性
             if tool_calls:
                 message = Message(content=choice.message.content, role=choice.message.role, tool_calls=tool_calls)
             else:
                 message = Message(content=choice.message.content, role=choice.message.role)
-            # 如果choise.message中还包含其他属性，则追加进来
-            for key in choice.message.model_dump():
+            
+            # 将message中的其他属性也转换为可序列化的结构
+            message_dict = self.convert_object_to_dict(choice.message.model_dump())
+            for key, value in message_dict.items():
                 if key not in ["content", "role", "tool_calls"]:
-                    setattr(message, key, getattr(choice.message, key))
+                    setattr(message, key, value)
+            
             choices.append(
                 Choices(
                     message=message, index=choice.index, finish_reason=choice.finish_reason
                 )
             )
-        # 把Usage对象里面的其他属性也添加到Usage对象中
-        usage_dict = openai_response.usage.model_dump()
+        
+        # 把Usage对象也转换为可序列化的结构
+        usage_dict = self.convert_object_to_dict(openai_response.usage.model_dump())
         usage = Usage(**usage_dict)
+        
+        # 创建最终响应对象
         response = ModelResponse(
             id=openai_response.id,
             choices=choices,
             created=openai_response.created,
             model=model,
             usage=usage,
+            object=getattr(openai_response, 'object', 'chat.completion'),
+            system_fingerprint=getattr(openai_response, 'system_fingerprint', None)
         )
+        
         return response
     
     def post_stream_processing(self, response, model=None):

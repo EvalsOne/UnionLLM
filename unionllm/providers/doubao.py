@@ -30,7 +30,7 @@ class DouBaoAIProvider(BaseProvider):
     def pre_processing(self, **kwargs):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "logprobs", "stream", "stop",
-            "presence_penalty", "frequency_penalty", "best_of", "logit_bias"
+            "presence_penalty", "frequency_penalty", "best_of", "logit_bias", "tools", "tool_choice"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:

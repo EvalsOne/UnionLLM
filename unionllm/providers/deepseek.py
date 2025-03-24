@@ -16,7 +16,6 @@ class DeepSeekError(Exception):
 
 class DeepSeekAIProvider(BaseProvider):
     def __init__(self, **model_kwargs):
-        # Get MOONSHOT_API_KEY from environment variables
         _env_api_key = os.environ.get("DEEPSEEK_API_KEY")
         self.api_key = model_kwargs.get("api_key") if model_kwargs.get("api_key") else _env_api_key
         if not self.api_key:
@@ -35,7 +34,7 @@ class DeepSeekAIProvider(BaseProvider):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias"
+            "best_of", "logit_bias", "tools", "tool_choice"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
@@ -77,6 +76,7 @@ class DeepSeekAIProvider(BaseProvider):
                 )
                 return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
+            raise e
             if hasattr(e, "status_code"):
                 raise DeepSeekError(status_code=e.status_code, message=str(e))
             else:
