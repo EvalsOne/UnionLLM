@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='unionllm',
-    version='0.1.26',
+    version='0.1.27',
     license='MIT',
     description='A Python library for unified access to Chinese domestic large language models.',
     author='everfly',
@@ -20,6 +20,7 @@ setup(
         'dashscope',
         'websocket_client',
         'requests',
-        'litellm'
+        'litellm',
+        'google-genai'
     ],
 )

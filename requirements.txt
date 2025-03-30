@@ -7,3 +7,4 @@ tenacity
 websocket_client
 zhipuai
 litellm
+google-genai
