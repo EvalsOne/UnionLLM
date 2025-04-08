@@ -329,8 +329,8 @@ def check_file_input_support(provider, model):
     # supported_providers = ["openai", "anthropic", "claude"]
     if provider == "coze":
         return "PARTIAL"
-    # elif provider in supported_providers:
-    #     return "PARTIAL"
+    elif provider in ["gemini", "anthropic"]:
+        return "FULL"
     else:
         return "PARTIAL"
 
@@ -356,55 +356,97 @@ def check_vision_input_support(provider, model):
 
 def check_video_input_support(provider, model):
     # supported_providers = ['zhipuai']
-    if provider == "coze":
-        return "PARTIAL"
-    # elif provider not in supported_providers:
-    #     return "NONE"
-    else:
-        # 默认支持，不做限制
+    if provider == "gemini":
         return "FULL"
+    else:
+        return "NONE"
 
 def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False):
     formatted_messages = []
     for message in messages:
-        # 保留原始消息的所有字段（包括tool_call_id和name）
+        # 保留原始消息除了content以外的所有字段（包括tool_call_id和name）
         new_formatted_message = {k: v for k, v in message.items() if k != 'content'}
-        
         if isinstance(message.get("content"), list):
-            new_formatted_message["content"] = ""
-            message_contents = message.get("content")            
+            new_formatted_message["content"] = []
+            message_contents = message.get("content")   
+            to_append_text = ""
             for content in message_contents:
                 if not isinstance(content, dict):
                     return False
                 content_type = content.get("type")
                 if content_type == "text":
                     if isinstance(content.get("text"), str):
-                        new_formatted_message["content"] += content.get("text")
+                        new_formatted_message["content"].append(content)
                 elif content_type in ["image_url","image"]:
                     if not reformat_image:
-                        formatted_messages.append(message)
+                        new_formatted_message["content"].append(content)
                         continue
                     elif content.get("image_url") and content.get("image_url").get("url"):
-                        new_formatted_message["content"] += f"![image]({content.get('image_url').get('url')})"
+                        to_append_text += f"![image]({content.get('image_url').get('url')})"
                     else:
                         return False
                 elif content_type == "video_url":
                     if not reformat_video:
-                        formatted_messages.append(message)
+                        new_formatted_message["content"].append(content)
                         continue
                     elif content.get("video_url") and content.get("video_url").get("url"):
-                        new_formatted_message["content"] += f"![video]({content.get('video_url').get('url')})"
+                        to_append_text += f"![video]({content.get('video_url').get('url')})"
                     else:
                         return False
                 elif content_type == "file_url":
                     if not reformat_file:
-                        formatted_messages.append(message)
+                        new_formatted_message["content"].append(content)
                         continue
                     elif content.get("file_url") and content.get("file_url").get("url"):
-                        new_formatted_message["content"] += f"[file]({content.get('file_url').get('url')})"
+                        if reformat_file == 1:
+                            to_append_text += f"[file]({content.get('file_url').get('url')})"
+                        elif reformat_file == 2:
+                            # 将文件转换为base64
+                            file_url = content.get("file_url").get("url")
+                            # 从URL获取文件数据
+                            try:
+                                import base64
+                                import requests
+                                from urllib.parse import urlparse
+                                
+                                # 检查是否已经是base64格式
+                                if "base64," in file_url:
+                                    # 已经是base64格式，直接使用
+                                    file_data = file_url
+                                else:
+                                    # 获取content中的
+
+                                    # 获取文件数据
+                                    response = requests.get(file_url)
+                                    file_content = response.content
+                                    
+                                    # 确定文件类型
+                                    content_type = response.headers.get('Content-Type', 'application/octet-stream')
+                                    
+                                    # 转换为base64
+                                    encoded_file = base64.b64encode(file_content).decode('utf-8')
+                                    file_data = f"data:{content_type};base64,{encoded_file}"
+                                
+                                # 创建所需格式
+                                new_content = {
+                                    "type": "file",
+                                    "file": {
+                                        "file_data": file_data
+                                    }
+                                }
+                                new_formatted_message["content"].append(new_content)
+                            except Exception as e:
+                                # 如果获取失败，则使用原始URL
+                                to_append_text += f"[file]({file_url})"
                     else:
                         return False
             formatted_messages.append(new_formatted_message)   
+
+            if to_append_text:
+                # 将to_append_text添加到formatted_messages中的text类型文本中
+                for content in formatted_messages[-1]["content"]:
+                    if content.get("type") == "text":
+                        content["text"] += to_append_text
         else:
             formatted_messages.append(message)
     return formatted_messages

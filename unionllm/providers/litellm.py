@@ -54,7 +54,7 @@ class LiteLLMProvider(BaseProvider):
                     status_code=422, message=f"Missing model or messages"
                 )
             # 检查消息格式
-            message_check_result = self.check_prompt("litellm", model, messages)       
+            message_check_result = self.check_prompt(provider, model, messages)       
             if message_check_result['pass_check']:
                 messages = message_check_result['messages']
             else:
@@ -65,6 +65,7 @@ class LiteLLMProvider(BaseProvider):
             new_kwargs = self.pre_processing(**kwargs)
                         
             stream = kwargs.get("stream", False)
+
             if stream:
                 if provider not in ['azure_ai']:
                     new_kwargs['stream_options'] = {"include_usage": True}

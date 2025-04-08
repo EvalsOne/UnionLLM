@@ -14,6 +14,7 @@ class UnionLLM:
     def __init__(self, provider: Optional[str] = None, **kwargs):
         self.provider = provider.lower() if provider else None
         self.litellm_call_type = None
+
         if self.provider == "zhipuai":
             self.provider_instance = zhipu.ZhipuAIProvider(**kwargs)
         elif self.provider == "moonshot":
@@ -48,8 +49,15 @@ class UnionLLM:
             self.provider_instance = doubao.DouBaoAIProvider(**kwargs)
         elif self.provider == "deepseek":
             self.provider_instance = deepseek.DeepSeekAIProvider(**kwargs)
+        # elif self.provider == "gemini":
+        #     self.provider_instance = gemini.GeminiAIProvider(**kwargs)
         elif self.provider == "gemini" and kwargs.get("multimodal") and kwargs['multimodal'] == True:
             self.provider_instance = gemini.GeminiAIProvider(**kwargs)
+        elif self.provider == "gemini" and kwargs.get("fileinput") and kwargs['fileinput'] == True:
+            self.provider_instance = gemini.GeminiAIProvider(**kwargs)
+        elif self.provider == "gemini" and kwargs.get("videoinput") and kwargs['videoinput'] == True:
+            self.provider_instance = gemini.GeminiAIProvider(**kwargs)
+
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:

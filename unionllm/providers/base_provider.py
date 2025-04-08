@@ -127,6 +127,9 @@ class BaseProvider(ABC):
                     elif file_input_support == "NONE":
                         # 如果文件不支持，则返回错误信息
                         return {"pass_check": False, "reformatted": False, "messages": messages, "reason": "File input is not supported"}
+                    elif file_input_support == "FULL":
+                        reformat_file= 2
+                        reformated = 1
                 if reformated or reformat_image or reformat_file or reformat_video:
                     messages = reformat_object_content(
                         messages, 

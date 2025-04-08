@@ -33,7 +33,8 @@ class GeminiAIProvider(BaseProvider):
             "model", "messages", "max_tokens", "temperature", "top_p",
             "stream", "stop", "presence_penalty", "frequency_penalty",
             "system_instruction",
-            "image_url", "tools", "tool_choice"
+            "image_url", "tools", "tool_choice",
+            "file_url", "video_url"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
@@ -41,8 +42,22 @@ class GeminiAIProvider(BaseProvider):
         return kwargs
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
-        # 提取最后一条用户消息
-        last_message = messages[-1]["content"]
+        # 处理所有消息
+        processed_messages = []
+        for msg in messages:
+            if msg["role"] == "user":
+                processed_messages.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=msg["content"])]
+                ))
+            elif msg["role"] == "assistant":
+                processed_messages.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text=msg["content"])]
+                ))
+            elif msg["role"] == "system":
+                # 系统消息作为配置项处理
+                new_kwargs["system_instruction"] = msg["content"]
 
         # 处理工具函数
         if "tools" in new_kwargs:
@@ -51,14 +66,7 @@ class GeminiAIProvider(BaseProvider):
                 gemini_tools.append(tool['function'])
 
             tools = types.Tool(function_declarations=gemini_tools)
-
-            tool_config = types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(
-                    mode="ANY"
-                )
-            )
-
-            config = types.GenerateContentConfig(tools=[tools], tool_config=tool_config)
+            config = types.GenerateContentConfig(tools=[tools])
         else:
             config = types.GenerateContentConfig(response_modalities=['Text', 'Image'])
 
@@ -66,29 +74,48 @@ class GeminiAIProvider(BaseProvider):
         if "system_instruction" in new_kwargs:
             config.system_instruction = new_kwargs["system_instruction"]
 
-        # 根据last_message判断是否包含图片url
-        contents = [last_message]
+        # 处理多模态内容
+        last_message = messages[-1]["content"]
         if "image_url" in new_kwargs:
             config.response_modalities = ['Image', 'Text']
             try:
-                # 下载图片并转换为PIL Image对象
                 response = requests.get(new_kwargs["image_url"])
                 image = Image.open(BytesIO(response.content))
-                contents = [last_message, image]
+                processed_messages[-1].parts.append(image)
             except Exception as e:
                 print(f"Error processing image URL: {str(e)}")
         
+        if "file_url" in new_kwargs:
+            file_url = new_kwargs["file_url"]
+            config.response_modalities = ['Text', 'File']
+            try:
+                response = requests.get(file_url)
+                file_content = response.content
+                
+                content_type = response.headers.get('Content-Type', 'application/octet-stream')
+                if file_url.endswith('.pdf'):
+                    content_type = 'application/pdf'
+                elif file_url.endswith('.docx'):
+                    content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                
+                file_part = types.Part.from_bytes(
+                    data=file_content,
+                    mime_type=content_type
+                )
+                processed_messages[-1].parts.append(file_part)
+            except Exception as e:
+                print(f"Error processing file URL: {str(e)}")
+
         try:
             # 使用 generate_content_stream 方法
             response = self.client.models.generate_content_stream(
                 model=model,
-                contents=contents,
+                contents=processed_messages,
                 config=config
             )
             
             index = 0
             for chunk in response:
-                # print(f"Processing chunk: {chunk}")
                 chunk_choices = []
                 chunk_delta = Delta()
                 if chunk.text:
@@ -131,7 +158,7 @@ class GeminiAIProvider(BaseProvider):
                                                 "arguments": json.dumps(part.function_call.args)
                                             }
                                         }]
-                                        chunk_choices.append(StreamingChoices(index=index, delta=chunk_delta))
+                                        chunk_choices.append(StreamingChoices(index=index, delta=chunk_delta, finish_reason="tool_calls"))
                                     except Exception as e:
                                         print("Error processing function call in stream:", str(e))
                         else:
@@ -151,9 +178,9 @@ class GeminiAIProvider(BaseProvider):
                     index += 1
                     yield chunk_response
         except Exception as e:
-            raise e
+            # raise e
             print(f"Error in stream processing: {str(e)}")
-            raise GeminiError(status_code=500, message=f"Stream processing error: {str(e)}")
+            # raise GeminiError(status_code=500, message=f"Stream processing error: {str(e)}")
 
     def create_model_response_wrapper(self, response, model):
         choices = []
@@ -161,9 +188,7 @@ class GeminiAIProvider(BaseProvider):
         tool_calls = []
                 
         # 处理所有输出部分(文本、图片和函数调用)
-        for part in response.candidates[0].content.parts:
-            # print("Processing part type:", type(part))  # 打印每个部分的类型
-            
+        for part in response.candidates[0].content.parts:            
             if part.text is not None:
                 content += part.text
             elif part.inline_data is not None:
@@ -231,7 +256,12 @@ class GeminiAIProvider(BaseProvider):
                 raise GeminiError(
                     status_code=422, message=message_check_result['reason']
                 )
-                
+
+            if "multimodal" in kwargs:
+                config = types.GenerateContentConfig(response_modalities = ['Text', 'Image'])
+            else:
+                config = types.GenerateContentConfig(response_modalities = ['Text'])
+
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
 
@@ -240,11 +270,6 @@ class GeminiAIProvider(BaseProvider):
             else:
                 # 获取最后一条消息内容
                 last_message = messages[-1]["content"]
-                
-                # 配置生成参数
-                config = types.GenerateContentConfig(
-                    response_modalities=['Text', 'Image']
-                )
                 
                 # 如果有system instruction,添加到配置中
                 if "system_instruction" in new_kwargs:
@@ -272,10 +297,12 @@ class GeminiAIProvider(BaseProvider):
                 
                 # 处理图片URL
                 contents = []
+
                 if isinstance(last_message, list):
                     # 处理OpenAI格式的多模态消息
                     text_parts = []
                     image_parts = []
+                    video_url = None
                     
                     for content in last_message:
                         if content.get("type") == "text":
@@ -288,19 +315,73 @@ class GeminiAIProvider(BaseProvider):
                                     response = requests.get(image_url)
                                     image = Image.open(BytesIO(response.content))
                                     image_parts.append(image)
+
                             except Exception as e:
                                 print(f"Error downloading image: {str(e)}")
+                        elif content.get("type") == "file":
+                            if "file" in content:
+                                file_data = content["file"]["file_data"]
+                                # 从file_data中获取文件类型
+                                content_type = file_data.split(",")[0].split(";")[0].replace("data:", "")
+                                
+                                config.response_modalities = ['Text']
+                                try:
+                                    # 解析base64部分
+                                    base64_data = file_data.split(",")[1]
+                                    file_content = base64.b64decode(base64_data)
+                                    
+                                    # 使用 types.Part.from_bytes 创建文件部分
+                                    file_part = types.Part.from_bytes(
+                                        data=file_content,
+                                        mime_type=content_type
+                                    )
+                                    
+                                    # 添加文本部分和文件部分
+                                    contents = [file_part, " ".join(text_parts) if text_parts else ""]
+                                except Exception as e:
+                                    print(f"Error processing file data: {str(e)}")
+                                    contents = [last_message]
+                        elif content.get("type") == "video_url":
+                            video_url = content.get("video_url", {}).get("url", "")
                     
-                    # 添加文本部分
-                    if text_parts:
-                        contents.append("".join(text_parts))
-                    
-                    # 添加图片部分
-                    contents.extend(image_parts)
-                    
-                    # 设置响应模态
-                    if image_parts:
-                        config.response_modalities = ['Text', 'Image']
+                    # 如果有视频URL，则优先处理视频
+                    if video_url and video_url.startswith("https://www.youtube.com/"):
+                        try:
+                            # 创建Content对象
+                            contents = types.Content(
+                                parts=[
+                                    types.Part(text=" ".join(text_parts) if text_parts else ""),
+                                    types.Part(
+                                        file_data=types.FileData(file_uri=video_url)
+                                    )
+                                ]
+                            )
+                            
+                            # 使用 generate_content 方法处理视频内容
+                            result = self.client.models.generate_content(
+                                model=model,
+                                contents=contents,
+                                config=config
+                            )
+                            
+                            return self.create_model_response_wrapper(result, model=model)
+                        except Exception as e:
+                            raise e
+                            print(f"Error processing video URL: {str(e)}")
+                            # 如果视频处理失败，尝试回退到普通文本处理
+                            if text_parts:
+                                contents.append(" ".join(text_parts))
+                    else:
+                        # 添加文本部分
+                        if text_parts:
+                            contents.append(" ".join(text_parts))
+                        
+                        # 添加图片部分
+                        contents.extend(image_parts)
+                        
+                        # 设置响应模态
+                        if image_parts:
+                            config.response_modalities = ['Text', 'Image']
                 elif "image_url" in new_kwargs:
                     # 处理image_url参数
                     try:
@@ -318,6 +399,31 @@ class GeminiAIProvider(BaseProvider):
                     except Exception as e:
                         print(f"Error downloading image: {str(e)}")
                         contents = last_message
+                elif "video_url" in new_kwargs:
+                    # 处理YouTube视频URL
+                    try:
+                        video_url = new_kwargs["video_url"]
+                        # 创建Content对象
+                        contents = types.Content(
+                            parts=[
+                                types.Part(text=last_message),
+                                types.Part(
+                                    file_data=types.FileData(file_uri=video_url)
+                                )
+                            ]
+                        )
+                        
+                        # 使用 generate_content 方法处理视频内容
+                        result = self.client.models.generate_content(
+                            model=model,
+                            contents=contents,
+                            config=config
+                        )
+                        
+                        return self.create_model_response_wrapper(result, model=model)
+                    except Exception as e:
+                        print(f"Error processing video URL: {str(e)}")
+                        contents = last_message
                 else:
                     # 普通文本消息
                     contents = last_message
@@ -328,7 +434,6 @@ class GeminiAIProvider(BaseProvider):
                     contents=contents,
                     config=config
                 )
-                
                 return self.create_model_response_wrapper(result, model=model)
                 
         except Exception as e:
