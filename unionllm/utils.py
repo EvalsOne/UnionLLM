@@ -401,42 +401,47 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
                         if reformat_file == 1:
                             to_append_text += f"[file]({content.get('file_url').get('url')})"
                         elif reformat_file == 2:
-                            # 将文件转换为base64
-                            file_url = content.get("file_url").get("url")
-                            # 从URL获取文件数据
-                            try:
-                                import base64
-                                import requests
-                                from urllib.parse import urlparse
-                                
-                                # 检查是否已经是base64格式
-                                if "base64," in file_url:
-                                    # 已经是base64格式，直接使用
-                                    file_data = file_url
-                                else:
-                                    # 获取content中的
+                            # 只转换pdf文件
+                            if content.get("file_url").get("url").endswith(".pdf"):
+                                # 将文件转换为base64
+                                file_url = content.get("file_url").get("url")
+                                # 从URL获取文件数据
+                                try:
+                                    import base64
+                                    import requests
+                                    from urllib.parse import urlparse
+                                    
+                                    # 检查是否已经是base64格式
+                                    if "base64," in file_url:
+                                        # 已经是base64格式，直接使用
+                                        file_data = file_url
+                                    else:
+                                        # 获取content中的
 
-                                    # 获取文件数据
-                                    response = requests.get(file_url)
-                                    file_content = response.content
+                                        # 获取文件数据
+                                        response = requests.get(file_url)
+                                        file_content = response.content
+                                        
+                                        # 确定文件类型
+                                        content_type = response.headers.get('Content-Type', 'application/octet-stream')
+                                        
+                                        # 转换为base64
+                                        encoded_file = base64.b64encode(file_content).decode('utf-8')
+                                        file_data = f"data:{content_type};base64,{encoded_file}"
                                     
-                                    # 确定文件类型
-                                    content_type = response.headers.get('Content-Type', 'application/octet-stream')
-                                    
-                                    # 转换为base64
-                                    encoded_file = base64.b64encode(file_content).decode('utf-8')
-                                    file_data = f"data:{content_type};base64,{encoded_file}"
-                                
-                                # 创建所需格式
-                                new_content = {
-                                    "type": "file",
-                                    "file": {
-                                        "file_data": file_data
+                                    # 创建所需格式
+                                    new_content = {
+                                        "type": "file",
+                                        "file": {
+                                            "file_data": file_data
+                                        }
                                     }
-                                }
-                                new_formatted_message["content"].append(new_content)
-                            except Exception as e:
-                                # 如果获取失败，则使用原始URL
+                                    new_formatted_message["content"].append(new_content)
+                                except Exception as e:
+                                    # 如果获取失败，则使用原始URL
+                                    to_append_text += f"[file]({file_url})"
+                            else:
+                                file_url = content.get("file_url").get("url")
                                 to_append_text += f"[file]({file_url})"
                     else:
                         return False
