@@ -1,4 +1,4 @@
-import dashscope
+from openai import OpenAI
 from .base_provider import BaseProvider
 from http import HTTPStatus
 from dashscope import Generation
@@ -24,7 +24,9 @@ class QwenAIProvider(BaseProvider):
             raise QwenOpenAIError(
                 status_code=422, message=f"Missing API key"
             )        
-        dashscope.api_key = self.api_key
+        
+        self.base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def pre_processing(self, **kwargs):
         supported_params = [
@@ -38,94 +40,15 @@ class QwenAIProvider(BaseProvider):
         return kwargs
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
-        responses = Generation.call(
-            model=model,
-            messages=messages,
-            result_format="message",
-            incremental_output=True,
-            **new_kwargs,
+        result = self.client.chat.completions.create(
+            model=model, messages=messages, **new_kwargs
         )
-        for response in responses:
-            if response.status_code == HTTPStatus.OK:
-                # chunk_message = response.output.choices[0].message
-                chunk_choices = []
-                index = 0
-                for choice in response.output.choices:
-                    chunk_message = choice.message
-                    chunk_delta = Delta()
-                    if chunk_message:
-                        if "role" in chunk_message:
-                            chunk_delta.role = chunk_message["role"]
-                        if "content" in chunk_message:
-                            chunk_delta.content = chunk_message["content"]
-                        chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
+        return self.post_stream_processing(result, model=model)
 
-                if hasattr(response, "usage") and response.usage is not None:
-                    chunk_usage = Usage()
-                    if "input_tokens" in response.usage:
-                        chunk_usage.prompt_tokens = response.usage["input_tokens"]
-                    if "output_tokens" in response.usage:
-                        chunk_usage.completion_tokens = response.usage["output_tokens"]
-                    if "total_tokens" in response.usage:
-                        chunk_usage.total_tokens = response.usage["total_tokens"]
+    def create_model_response_wrapper(self, result, model):
+        return self.create_model_response(result, model=model)
 
-                chunk_response = ModelResponse(
-                    id=response.request_id,
-                    choices=chunk_choices,
-                    created=int(time.time()),
-                    model=model,
-                    usage=chunk_usage if chunk_usage else None,
-                    stream=True
-                )
-                index += 1
-                yield chunk_response
-
-            else:
-                raise QwenOpenAIError(
-                    status_code=response.status_code,
-                    message=f"error message: {response.message}",
-                )
-                
-
-    def create_model_response_wrapper(self, response, model):
-        if response.status_code == HTTPStatus.OK:
-            response_dict = response.output
-            choices = []
-
-            for index, choice in enumerate(response_dict.choices):
-                message = Message(
-                    content=choice.message.content,
-                    role=choice.message.role
-                )
-                choices.append(
-                    Choices(
-                        message=message,
-                        index=index,
-                        finish_reason=choice.finish_reason,
-                    )
-                )
-
-            usage = Usage(
-                prompt_tokens=response.usage.input_tokens,
-                completion_tokens=response.usage.output_tokens,
-                total_tokens=response.usage.total_tokens,
-            )
-
-            return ModelResponse(
-                id=response.request_id,
-                choices=choices,
-                created=int(time.time()),
-                model=model,
-                usage=usage,
-            )
-        else:
-            raise QwenOpenAIError(
-                status_code=response.status_code,
-                message=f"Request failed with status code: {response.status_code}",
-            )
-
-
-    def create_qwen_model_response(result: dict, model: str) -> ModelResponse:
+    def create_model_response(self, result: dict, model: str) -> ModelResponse:
         choices = []
         for index, choice in enumerate(result.output.choices):
             message = Message(content=choice.message.content, role=choice.message.role)
@@ -146,7 +69,6 @@ class QwenAIProvider(BaseProvider):
         )
         return response
 
-
     def completion(self, model: str, messages: list, **kwargs):
         try:
             if model is None or messages is None:
@@ -163,19 +85,14 @@ class QwenAIProvider(BaseProvider):
                 )                
             new_kwargs = self.pre_processing(**kwargs)
             stream = new_kwargs.get("stream", False)
+
             if stream:
-                return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
+                return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             else:
-                response = Generation.call(
-                    model=model,
-                    messages=messages,
-                    result_format="message",
-                    **new_kwargs,
+                result = self.client.chat.completions.create(
+                    model=model, messages=messages, **new_kwargs
                 )
-                if response.status_code == HTTPStatus.OK:
-                    return self.create_model_response_wrapper(response, model=model)
-                else:
-                    return {'success': False, 'error': {'status_code': response.status_code, 'message': response.message}}
+                return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):
                 raise QwenOpenAIError(status_code=e.status_code, message=str(e))
