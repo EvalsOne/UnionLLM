@@ -138,8 +138,12 @@ class BaseProvider(ABC):
                         reformat_file=reformat_file,
                         reformat_video=reformat_video
                     )
-                
-        return {"pass_check": True, "reformatted": reformated, "messages": messages}         
+        multimodal_info = {
+            "has_vision_input": has_vision_input,
+            "has_video_input": has_video_input,
+            "has_file_input": has_file_input
+        }
+        return {"pass_check": True, "reformatted": reformated, "messages": messages, "multimodal_info": multimodal_info}         
 
     def convert_object_to_dict(self, obj):
         """将任何对象递归转换为纯字典/列表结构"""

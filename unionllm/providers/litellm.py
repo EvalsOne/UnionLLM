@@ -43,6 +43,7 @@ class LiteLLMProvider(BaseProvider):
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
+            print(kwargs)
             if 'provider' in kwargs:
                 provider = kwargs['provider']
                 kwargs.pop('provider')

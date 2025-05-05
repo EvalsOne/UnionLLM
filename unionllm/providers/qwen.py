@@ -1,7 +1,7 @@
 import dashscope
 from .base_provider import BaseProvider
 from http import HTTPStatus
-from dashscope import Generation
+from dashscope import Generation, MultiModalConversation
 from unionllm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 import json, time, os
 
@@ -38,13 +38,23 @@ class QwenAIProvider(BaseProvider):
         return kwargs
 
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
-        responses = Generation.call(
-            model=model,
-            messages=messages,
-            result_format="message",
-            incremental_output=True,
-            **new_kwargs,
-        )
+        if_vision_model = new_kwargs.get("if_vision_model", False)
+        new_kwargs.pop("if_vision_model")
+        if if_vision_model:
+            responses = MultiModalConversation.call(
+                model=model,
+                messages=messages,
+                incremental_output=True,
+                **new_kwargs
+            )
+        else:
+            responses = Generation.call(
+                model=model,
+                messages=messages,
+                result_format="message",
+                incremental_output=True,
+                **new_kwargs,
+            )
         for response in responses:
             if response.status_code == HTTPStatus.OK:
                 # chunk_message = response.output.choices[0].message
@@ -57,8 +67,33 @@ class QwenAIProvider(BaseProvider):
                         if "role" in chunk_message:
                             chunk_delta.role = chunk_message["role"]
                         if "content" in chunk_message:
-                            chunk_delta.content = chunk_message["content"]
-                        chunk_choices.append(StreamingChoices(index=str(index), delta=chunk_delta))
+                            if isinstance(chunk_message["content"], list) and chunk_message["content"] and isinstance(chunk_message["content"][0], dict):
+                                chunk_delta.content = chunk_message["content"][0]["text"]
+                            else:
+                                chunk_delta.content = chunk_message["content"]
+
+                        if 'tool_calls' in chunk_message and chunk_message['tool_calls']:
+                            tool_calls = []
+                            for tool_call in chunk_message['tool_calls']:
+                                tool_calls.append(
+                                    {
+                                        "id": tool_call['id'] if 'id' in tool_call and tool_call['id'] else None,
+                                        "index": tool_call['index'],
+                                        "type": "function",
+                                        "function": {
+                                            "name": tool_call['function']['name'] if 'name' in tool_call['function'] else None,
+                                            "arguments": tool_call['function']['arguments'] if 'arguments' in tool_call['function'] else None
+                                        }
+                                    }
+                                )
+                            chunk_delta.tool_calls = tool_calls
+                        stream_choices = StreamingChoices(index=index, delta=chunk_delta)
+                        if 'finish_reason' in choice:
+                            if choice['finish_reason'] is not None and choice['finish_reason'] != 'null':
+                                stream_choices.finish_reason = choice['finish_reason']
+                            else:
+                                stream_choices.finish_reason = None
+                        chunk_choices.append(stream_choices)
 
                 if hasattr(response, "usage") and response.usage is not None:
                     chunk_usage = Usage()
@@ -146,6 +181,40 @@ class QwenAIProvider(BaseProvider):
         )
         return response
 
+    def reformat_messages(self, messages: list) -> list:
+        # 根据qwen的格式要求，重新组织messages
+        new_messages = []
+        for message in messages:
+            if message['role'] == 'user':
+                if isinstance(message['content'], list):
+                    new_content = []
+                    for content in message['content']:
+                        if content.get('type') == 'text':
+                            new_content.append({
+                                "text": content.get('text')
+                            })
+                        elif content.get('type') == 'image_url':
+                            new_content.append({
+                                "image": content.get('image_url').get('url')
+                            })
+                    new_messages.append({
+                        "role": "user",
+                        "content": new_content
+                    })
+                else:
+                    new_messages.append({
+                        "role": "user",
+                        "content": message['content']
+                    })
+            else:
+                new_messages.append({
+                    "role": message['role'],
+                    "content": message['content']
+                })
+        return new_messages
+    
+    def check_if_vision_model(self, model: str) -> bool:
+        return model in ["qwen-vl-max", "qwen-vl-plus"]
 
     def completion(self, model: str, messages: list, **kwargs):
         try:
@@ -153,25 +222,41 @@ class QwenAIProvider(BaseProvider):
                 raise QwenOpenAIError(
                     status_code=422, message=f"Missing model or messages"
                 )
-
-            message_check_result = self.check_prompt("qwen", model, messages)   
+            message_check_result = self.check_prompt("qwen", model, messages)  
+             
             if message_check_result['pass_check']:
                 messages = message_check_result['messages']
             else:
                 raise QwenOpenAIError(
                     status_code=422, message=message_check_result['reason']
-                )                
+                )          
+
+            has_vision_input = message_check_result['multimodal_info']['has_vision_input']
+            if_vision_model = self.check_if_vision_model(model)
+            if if_vision_model:
+                if has_vision_input:
+                    # 根据qwen的格式要求，重新组织messages
+                    messages = self.reformat_messages(messages)
+
             new_kwargs = self.pre_processing(**kwargs)
+            new_kwargs['if_vision_model'] = if_vision_model
             stream = new_kwargs.get("stream", False)
             if stream:
                 return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
             else:
-                response = Generation.call(
-                    model=model,
-                    messages=messages,
-                    result_format="message",
-                    **new_kwargs,
-                )
+                if if_vision_model:
+                    response = MultiModalConversation.call(
+                        model=model,
+                        messages=messages,
+                        **new_kwargs,
+                    )
+                else:
+                    response = Generation.call(
+                        model=model,
+                        messages=messages,
+                        result_format="message",
+                        **new_kwargs,
+                    )
                 if response.status_code == HTTPStatus.OK:
                     return self.create_model_response_wrapper(response, model=model)
                 else:

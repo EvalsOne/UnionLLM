@@ -2,11 +2,10 @@ import logging
 import asyncio
 from functools import partial
 
-from typing import Any, List
+from typing import Any, List, Optional
 from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
-from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,14 @@ class UnionLLM:
         elif self.provider == "minimax":
             self.provider_instance = minimax.MinimaxAIProvider(**kwargs)
         elif self.provider == "qwen":
-            self.provider_instance = qwen.QwenAIProvider(**kwargs)
+            # 根据model判断是否需要使用dashscope的api, 否则使用openai的兼容api
+            model = kwargs.get("model")
+            # 预留特殊模型通过litellm调用
+            if model is not None and model not in ["qwen-special-model"]:
+                self.provider_instance = qwen.QwenAIProvider(**kwargs)
+            else:
+                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
+                self.litellm_call_type = 3
         elif self.provider == "tiangong":
             self.provider_instance = tiangong.TianGongAIProvider(**kwargs)
         elif self.provider == "baichuan":
@@ -73,7 +79,7 @@ class UnionLLM:
         else:
             self.provider_instance = litellm.LiteLLMProvider(**kwargs)
 
-    def completion(self, model: str, messages: List[str], **kwargs) -> Any:
+    def completion(self, model: str, messages: List[str], timeout: Optional[float] = None, **kwargs) -> Any:
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
         if self.litellm_call_type:
@@ -81,17 +87,19 @@ class UnionLLM:
                 # Jugde whether the model starts with self.provider, if not, add it
                 if not model.startswith(self.provider+"/"):
                     model = f"{self.provider}/{model}"     
-                return self.provider_instance.completion(model, messages, **kwargs)
+                return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
             elif self.litellm_call_type == 2:
-                return self.provider_instance.completion(model, messages, **kwargs)
+                return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
             elif self.litellm_call_type == 3:
                 # append OpenAI as provider name
                 if self.provider == 'xai':
                     kwargs['api_base'] = "https://api.x.ai/v1"
+                if self.provider == 'qwen':
+                    kwargs['api_base'] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
                 model = f"openai/{model}"
-                return self.provider_instance.completion(model, messages, **kwargs)
+                return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
         else:
-            return self.provider_instance.completion(model, messages, **kwargs)
+            return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
         
     async def acompletion(self, model: str, messages: List[str], **kwargs) -> Any:
         loop = asyncio.get_event_loop()
@@ -119,7 +127,7 @@ class UnionLLM:
         elif provider in ['openai', 'cohere', 'ai21', 'deepinfra', 'ai21', 'alpha_alpha']:
             # provider name should not be added to the model name
             return True, 2
-        elif provider in ['xai']:
+        elif provider in ['xai', 'qwen']:
             # append OpenAI as procall as OpenAI campatible API
             return True, 3
         else:
