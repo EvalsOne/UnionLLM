@@ -79,7 +79,7 @@ class UnionLLM:
         else:
             self.provider_instance = litellm.LiteLLMProvider(**kwargs)
 
-    def completion(self, model: str, messages: List[str], timeout: Optional[float] = None, **kwargs) -> Any:
+    def completion(self, model: str, messages: List[str], **kwargs) -> Any:
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
         if self.litellm_call_type:
@@ -87,9 +87,9 @@ class UnionLLM:
                 # Jugde whether the model starts with self.provider, if not, add it
                 if not model.startswith(self.provider+"/"):
                     model = f"{self.provider}/{model}"     
-                return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
+                return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 2:
-                return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
+                return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 3:
                 # append OpenAI as provider name
                 if self.provider == 'xai':
@@ -97,9 +97,9 @@ class UnionLLM:
                 if self.provider == 'qwen':
                     kwargs['api_base'] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
                 model = f"openai/{model}"
-                return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
+                return self.provider_instance.completion(model, messages, **kwargs)
         else:
-            return self.provider_instance.completion(model, messages, timeout=timeout, **kwargs)
+            return self.provider_instance.completion(model, messages, **kwargs)
         
     async def acompletion(self, model: str, messages: List[str], **kwargs) -> Any:
         loop = asyncio.get_event_loop()
