@@ -1,5 +1,6 @@
 import logging
 import asyncio
+import os
 from functools import partial
 
 from typing import Any, List, Optional
@@ -27,6 +28,8 @@ class UnionLLM:
             if model is not None and model not in ["qwen-special-model"]:
                 self.provider_instance = qwen.QwenAIProvider(**kwargs)
             else:
+                # 使用DASHSCOPE_API_KEY作为OPENAI_API_KEY
+                os.environ["OPENAI_API_KEY"] = os.environ.get("DASHSCOPE_API_KEY")
                 self.provider_instance = litellm.LiteLLMProvider(**kwargs)
                 self.litellm_call_type = 3
         elif self.provider == "tiangong":

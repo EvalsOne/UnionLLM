@@ -21,13 +21,16 @@ class WenXinAIProvider(BaseProvider):
         # Get ERNIE_CLIENT_ID and ERNIE_CLIENT_ID from environment variables
         _env_client_id = os.environ.get("ERNIE_CLIENT_ID")
         _env_client_secret = os.environ.get("ERNIE_CLIENT_SECRET")
+        _env_apikey = os.environ.get("ERNIE_API_KEY")
         self.client_id = model_kwargs.get("client_id") if model_kwargs.get("client_id") else _env_client_id
         self.client_secret = model_kwargs.get("client_secret") if model_kwargs.get("client_secret") else _env_client_secret
-        if not self.client_id or not self.client_secret:
+        self.api_key = model_kwargs.get("api_key") if model_kwargs.get("api_key") else _env_apikey
+        if (not self.client_id or not self.client_secret) and not self.api_key:
             raise WenXinOpenAIError(
-                status_code=422, message=f"Missing client_id or client_secret"
+                status_code=422, message=f"Missing necessary credentials"
             )
-        self.access_token = self.get_access_token()
+        if not self.api_key:
+            self.access_token = self.get_access_token()
 
     def get_access_token(self):
         url = "https://aip.baidubce.com/oauth/2.0/token"
@@ -59,6 +62,8 @@ class WenXinAIProvider(BaseProvider):
     def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
         payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
         headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         index = 0
         for line in requests.post(self.endpoint_url, headers=headers, data=payload, stream=True).iter_lines():
             if line:
@@ -100,28 +105,61 @@ class WenXinAIProvider(BaseProvider):
 
 
     def create_model_response_wrapper(self, result, model):
-        response_dict = json.loads(result)
+        response_dict = result.json()
         choices = []
-
-        message = Message(content=response_dict["result"], role="assistant")
-        choices.append(
-            Choices(
-                message=message,
-                index=0,
-                finish_reason="unknown",  # The finish_reason is not provided by the API
+        
+        # 兼容result模式
+        
+        if 'result' in response_dict:
+            message = Message(
+                content=response_dict["result"],
+                role="assistant"
             )
-        )
-
+            choices.append(
+                Choices(
+                    message=message,
+                    index=0,
+                    finish_reason="stop"
+                )
+            )
+        elif 'choices' in response_dict:
+            for choice in response_dict["choices"]:
+                message = Message(
+                    content=choice["message"]["content"],
+                    role=choice["message"]["role"]
+                )
+                
+                # Add tool_calls support
+                if 'tool_calls' in choice["message"] and choice["message"]['tool_calls']:
+                    tool_calls = []
+                    for tool_call in choice["message"]['tool_calls']:
+                        tool_calls.append(
+                            {
+                                "id": tool_call['id'] if 'id' in tool_call and tool_call['id'] else None,
+                                "index": tool_call['index'] if 'index' in tool_call else 0,
+                                "type": "function",
+                                "function": {
+                                    "name": tool_call['function']['name'] if 'function' in tool_call and 'name' in tool_call['function'] else None,
+                                    "arguments": tool_call['function']['arguments'] if 'function' in tool_call and 'arguments' in tool_call['function'] else None
+                                }
+                            }
+                        )
+                    message.tool_calls = tool_calls
+                
+                choices.append(
+                    Choices(
+                        message=message,
+                        index=choice["index"],
+                        finish_reason=choice["finish_reason"],
+                    )
+                )
         usage = Usage(
-            prompt_tokens=0,  # The usage details are not provided by the API
-            completion_tokens=0,
-            total_tokens=0,
+            total_tokens=response_dict["usage"]["total_tokens"],
         )
-
         response = ModelResponse(
-            id="unknown",  # The request_id is not provided by the API
+            id=response_dict["id"],
             choices=choices,
-            created=int(time.time()),
+            created=response_dict["created"],
             model=model,
             usage=usage,
         )
@@ -158,15 +196,20 @@ class WenXinAIProvider(BaseProvider):
             else:
                 self.model_path = model
 
-            self.endpoint_url = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/{self.model_path}?access_token={self.access_token}"
+            if self.api_key:
+                self.endpoint_url = f"https://qianfan.baidubce.com/v2/chat/completions"
+            else:
+                self.endpoint_url = f"https://aip.baidubce.com/rpc/2.0/ai_custom/v1/wenxinworkshop/chat/{self.model_path}?access_token={self.access_token}"
 
             if stream:
                 return self.post_stream_processing_wrapper(model, messages, **new_kwargs)
             else:
                 payload = json.dumps({"model": model, "messages": messages, **new_kwargs})
                 headers = {"Content-Type": "application/json"}
+                if self.api_key:
+                    headers["Authorization"] = f"Bearer {self.api_key}"
                 result = requests.post(self.endpoint_url, headers=headers, data=payload)
-                return self.create_model_response_wrapper(result.text, model=model)
+                return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
             if hasattr(e, "status_code"):
                 raise WenXinOpenAIError(status_code=e.status_code, message=str(e))
