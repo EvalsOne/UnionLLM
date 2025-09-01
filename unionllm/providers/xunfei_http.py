@@ -24,10 +24,10 @@ class XunfeiHTTPProvider(BaseProvider):
                 status_code=422, message=f"Missing API key"
             )
         model = getattr(self, "model", None)
-        if not model_kwargs.get("base_url"):
+        if not model_kwargs.get("api_base"):
             self.base_url = "https://spark-api-open.xf-yun.com/v1"
         else:
-            self.base_url = model_kwargs.get("base_url")        
+            self.base_url = model_kwargs.get("api_base")
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def pre_processing(self, **kwargs):
