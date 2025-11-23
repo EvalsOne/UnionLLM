@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 from typing import Any, List, Optional
-from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini
+from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini, azure
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
 
@@ -14,7 +14,6 @@ class UnionLLM:
     def __init__(self, provider: Optional[str] = None, **kwargs):
         self.provider = provider.lower() if provider else None
         self.litellm_call_type = None
-
         if self.provider == "zhipuai":
             self.provider_instance = zhipu.ZhipuAIProvider(**kwargs)
         elif self.provider == "moonshot":
@@ -26,9 +25,10 @@ class UnionLLM:
             model = kwargs.get("model")
             # 预留特殊模型通过litellm调用
             if model is not None and model not in ["qwen-special-model"]:
+                # 使用 DashScope 兼容模式（需要 dashscope key）
                 self.provider_instance = qwen.QwenAIProvider(**kwargs)
             else:
-                # 使用 DashScope 兼容模式（需要 dashscope key）
+                # 预留特殊模型通过litellm调用
                 dashscope_key = os.getenv("DASHSCOPE_API_KEY")
                 # 仅在未设置 OPENAI_API_KEY 时写入，避免覆盖用户已有 key
                 if not os.getenv("OPENAI_API_KEY"):
@@ -62,15 +62,17 @@ class UnionLLM:
             self.provider_instance = doubao.DouBaoAIProvider(**kwargs)
         elif self.provider == "deepseek":
             self.provider_instance = deepseek.DeepSeekAIProvider(**kwargs)
-        # elif self.provider == "gemini":
-        #     self.provider_instance = gemini.GeminiAIProvider(**kwargs)
-        elif self.provider == "gemini" and kwargs.get("multimodal") and kwargs['multimodal'] == True:
-            self.provider_instance = gemini.GeminiAIProvider(**kwargs)
-        elif self.provider == "gemini" and kwargs.get("fileinput") and kwargs['fileinput'] == True:
-            self.provider_instance = gemini.GeminiAIProvider(**kwargs)
-        elif self.provider == "gemini" and kwargs.get("videoinput") and kwargs['videoinput'] == True:
-            self.provider_instance = gemini.GeminiAIProvider(**kwargs)
-
+        elif self.provider == "gemini": 
+            self.provider_instance = gemini.GeminiAIProvider(**kwargs)    
+        elif self.provider == "azure":
+            model = kwargs.get("model")
+            # 对于 Claude 系列，使用 Azure 原生（Anthropic Foundry）调用
+            if model is not None and str(model).lower().startswith("claude"):
+                self.provider_instance = azure.AzureAnthropicProvider(**kwargs)
+            else:
+                # 其余模型走现有 Litellm 兼容路径
+                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
+                self.litellm_call_type = 1
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
@@ -98,7 +100,7 @@ class UnionLLM:
             elif self.litellm_call_type == 2:
                 return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 3:
-                # append OpenAI as provider name
+                # append OpenAI as provider name and handle special api_base for some providers
                 if self.provider == 'xai':
                     kwargs['api_base'] = "https://api.x.ai/v1"
                 if self.provider == 'qwen':

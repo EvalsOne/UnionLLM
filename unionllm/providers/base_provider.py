@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from ..models import ResponseModel
 from typing import TYPE_CHECKING, Any, Dict, Optional, Sequence, List, Union
-from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, Function, ChatCompletionMessageToolCall, check_object_input_support, check_video_input_support, check_vision_input_support, reformat_object_content, check_file_input_support
+from unionllm.utils import ModelResponse, Message, Choices, Usage, Context, StreamingChoices, Delta, Function, ChatCompletionMessageToolCall, check_object_input_support, check_video_input_support, check_vision_input_support, reformat_object_content, check_file_input_support, check_audio_input_support
 
 import openai
 import json
@@ -36,6 +36,7 @@ class BaseProvider(ABC):
         has_object_content = False
         has_vision_input = False
         has_video_input = False
+        has_audio_input = False
         has_file_input = False
         for i, message in enumerate(messages):
             if message.get("role") == "system":
@@ -50,20 +51,14 @@ class BaseProvider(ABC):
                         else:
                             has_object_content = True
                             if content.get("type") == "image_url":
-                                if content.get("image_url").get("url"):
-                                    has_vision_input = True
-                                else:
-                                    is_invalid_format = True
+                                has_vision_input = True
                             elif content.get("type") == "video_url":
-                                if content.get("video_url").get("url"):
-                                    has_video_input = True
-                                else:
-                                    is_invalid_format = True
+                                has_video_input = True
+                            elif content.get("type") == "audio_url":
+                                has_audio_input = True
                             elif content.get("type") == "file_url":
-                                if content.get("file_url").get("url"):
-                                    has_file_input = True
-                                else:
-                                    is_invalid_format = True
+                                has_file_input = True
+
                             # 新增对tool角色的特殊处理
                             if message.get("role") == "tool":
                                 # 保留tool_call_id和name字段
@@ -86,13 +81,14 @@ class BaseProvider(ABC):
                     return {"pass_check": False, "reformatted": False, "reason": "Object content is not supported"}
                 else:
                     # 如果不包含，则将object content转为文本
-                    messages = reformat_object_content(messages, False, False, False)
+                    messages = reformat_object_content(messages, False, False, False, False)
                     reformated = 1
             else:
                 # 如果支持
                 reformat_image = 0
                 reformat_file = 0
                 reformat_video = 0
+                reformat_audio = 0
                 if object_support == "PARTIAL":
                     # 如果部分支持，则需要将object content转为文本
                     reformated = 1
@@ -109,14 +105,28 @@ class BaseProvider(ABC):
                 
                 if has_video_input:
                     video_input_support = check_video_input_support(provider, model)
-                    if video_input_support == "PARTIAL":
+                    if video_input_support == "FULL":
+                        reformat_video = 2
+                        reformated = 1
+                    elif video_input_support == "PARTIAL":
                         # 如果视频是部分支持，则需要将视频转为文本
                         reformat_video = 1
                         reformated = 1
                     elif video_input_support == "NONE":
                         # 如果视频不支持，则返回错误信息
                         return {"pass_check": False, "reformatted": False, "reason": "Video input is not supported"}
-                    
+                
+                if has_audio_input:
+                    # 如果包含音频
+                    audio_input_support = check_audio_input_support(provider, model)
+                    if audio_input_support == "PARTIAL":
+                        # 如果音频是部分支持，则需要将音频转为文本
+                        reformat_audio = 1
+                        reformated = 1
+                    elif audio_input_support == "NONE":
+                        # 如果音频不支持，则返回错误信息
+                        return {"pass_check": False, "reformatted": False, "messages": messages, "reason": "Audio input is not supported"}
+                
                 if has_file_input:
                     # 如果包含文件
                     file_input_support = check_file_input_support(provider, model)
@@ -130,18 +140,20 @@ class BaseProvider(ABC):
                     elif file_input_support == "FULL":
                         reformat_file= 2
                         reformated = 1
-                if reformated or reformat_image or reformat_file or reformat_video:
+                if reformated or reformat_image or reformat_file or reformat_video or reformat_audio:
                     messages = reformat_object_content(
                         messages, 
                         True,  # 新增参数保留tool元数据
                         reformat_image=reformat_image,
                         reformat_file=reformat_file,
-                        reformat_video=reformat_video
+                        reformat_video=reformat_video,
+                        reformat_audio=reformat_audio
                     )
         multimodal_info = {
             "has_vision_input": has_vision_input,
             "has_video_input": has_video_input,
-            "has_file_input": has_file_input
+            "has_file_input": has_file_input,
+            "has_audio_input": has_audio_input
         }
         return {"pass_check": True, "reformatted": reformated, "messages": messages, "multimodal_info": multimodal_info}         
 

@@ -1,10 +1,13 @@
 dashscope
 openai
 pydantic
-Requests
+requests  # normalize package name to lowercase
 setuptools
 tenacity
 websocket_client
 zhipuai
 litellm
 google-genai
+anthropic
+azure-identity
+Pillow  # required for image processing (PIL)

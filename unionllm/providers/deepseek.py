@@ -76,7 +76,6 @@ class DeepSeekAIProvider(BaseProvider):
                 )
                 return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
-            raise e
             if hasattr(e, "status_code"):
                 raise DeepSeekError(status_code=e.status_code, message=str(e))
             else:

@@ -36,12 +36,14 @@ class Message(OpenAIObject):
 
 
 class Delta(OpenAIObject):
-    def __init__(self, content=None, role=None, **params):
+    def __init__(self, content=None, role=None, thought_signature=None, **params):
         super(Delta, self).__init__(**params)
         if content is not None:
             self.content = content
         if role:
             self.role = role
+        if thought_signature:
+            self.thought_signature = thought_signature
 
     def __contains__(self, key):
         # Define custom behavior for the 'in' operator
@@ -343,25 +345,21 @@ def check_vision_input_support(provider, model):
     else:
         # 默认支持，不做限制
         return "FULL"
-    
-    # supported_models = [
-    #     {"zhipuai": ["glm-4v", "glm-4v-plus"]}
-    # ]
-    
-    # for entry in supported_models:
-    #     if provider in entry:
-    #         if model in entry[provider]:
-    #             return "FULL"    
-    # return "NONE"
 
 def check_video_input_support(provider, model):
     # supported_providers = ['zhipuai']
     if provider == "gemini":
         return "FULL"
     else:
-        return "NONE"
+        return "PARTIAL"
 
-def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False):
+def check_audio_input_support(provider, model):
+    if provider == "gemini":
+        return "FULL"
+    else:
+        return "PARTIAL"
+
+def reformat_object_content(messages, reformat=False, reformat_image=False, reformat_file=False, reformat_video=False, reformat_audio=False):
     formatted_messages = []
     for message in messages:
         # 保留原始消息除了content以外的所有字段（包括tool_call_id和name）
@@ -377,6 +375,63 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
                 if content_type == "text":
                     if isinstance(content.get("text"), str):
                         new_formatted_message["content"].append(content)
+                elif content_type == "audio_url":
+                    if not reformat_audio:
+                        new_formatted_message["content"].append(content)
+                        continue
+                    elif content.get("audio_url") and content.get("audio_url").get("url"):
+                        if reformat_audio == 1:
+                            to_append_text += f"![audio]({content.get('audio_url').get('url')})"
+                        elif reformat_audio == 2:
+                            # 转换音频为inline_data格式 (适用于 Gemini/litellm)
+                            audio_url = content.get("audio_url").get("url")
+                            try:
+                                import base64
+                                import requests
+                                
+                                # 检查是否已经是base64格式
+                                if "base64," in audio_url:
+                                    # 已经是base64格式，直接使用
+                                    audio_data = audio_url
+                                else:
+                                    # 获取音频数据
+                                    response = requests.get(audio_url)
+                                    audio_content = response.content
+                                    
+                                    # 确定音频MIME类型
+                                    # 支持的音频格式: mp3, wav, ogg, flac, m4a
+                                    content_type_header = response.headers.get('Content-Type', 'audio/mpeg')
+                                    
+                                    # 如果无法从header获取，尝试从URL扩展名推断
+                                    if content_type_header == 'audio/mpeg' and not audio_url.endswith('.mp3'):
+                                        ext_mapping = {
+                                            '.wav': 'audio/wav',
+                                            '.ogg': 'audio/ogg',
+                                            '.flac': 'audio/flac',
+                                            '.m4a': 'audio/m4a'
+                                        }
+                                        for ext, mime in ext_mapping.items():
+                                            if audio_url.lower().endswith(ext):
+                                                content_type_header = mime
+                                                break
+                                    
+                                    # 转换为base64
+                                    encoded_audio = base64.b64encode(audio_content).decode('utf-8')
+                                    audio_data = f"data:{content_type_header};base64,{encoded_audio}"
+                                
+                                # 创建inline_data格式 (litellm标准格式)
+                                new_content = {
+                                    "type": "file",
+                                    "file": {
+                                        "file_data": audio_data
+                                    }
+                                }
+                                new_formatted_message["content"].append(new_content)
+                            except Exception as e:
+                                # 如果获取失败，则使用原始URL格式
+                                to_append_text += f"![audio]({audio_url})"
+                    else:
+                        return False
                 elif content_type in ["image_url","image"]:
                     if not reformat_image:
                         new_formatted_message["content"].append(content)
@@ -390,7 +445,61 @@ def reformat_object_content(messages, reformat=False, reformat_image=False, refo
                         new_formatted_message["content"].append(content)
                         continue
                     elif content.get("video_url") and content.get("video_url").get("url"):
-                        to_append_text += f"![video]({content.get('video_url').get('url')})"
+                        if reformat_video == 1:
+                            to_append_text += f"![video]({content.get('video_url').get('url')})"
+                        elif reformat_video == 2:
+                            # 转换视频为inline_data格式 (适用于 Gemini/litellm)
+                            video_url = content.get("video_url").get("url")
+                            try:
+                                import base64
+                                import requests
+                                
+                                # 检查是否已经是base64格式
+                                if "base64," in video_url:
+                                    # 已经是base64格式，直接使用
+                                    video_data = video_url
+                                else:
+                                    # 获取视频数据
+                                    response = requests.get(video_url)
+                                    video_content = response.content
+                                    
+                                    # 确定视频MIME类型
+                                    # 支持的视频格式: mp4, mpeg, mov, avi, x-flv, mpg, webm, wmv, 3gpp
+                                    content_type_header = response.headers.get('Content-Type', 'video/mp4')
+                                    
+                                    # 如果无法从header获取，尝试从URL扩展名推断
+                                    if content_type_header == 'video/mp4' and not video_url.endswith('.mp4'):
+                                        ext_mapping = {
+                                            '.mpeg': 'video/mpeg',
+                                            '.mov': 'video/mov',
+                                            '.avi': 'video/avi',
+                                            '.flv': 'video/x-flv',
+                                            '.mpg': 'video/mpg',
+                                            '.webm': 'video/webm',
+                                            '.wmv': 'video/wmv',
+                                            '.3gpp': 'video/3gpp',
+                                            '.3gp': 'video/3gpp'
+                                        }
+                                        for ext, mime in ext_mapping.items():
+                                            if video_url.lower().endswith(ext):
+                                                content_type_header = mime
+                                                break
+                                    
+                                    # 转换为base64
+                                    encoded_video = base64.b64encode(video_content).decode('utf-8')
+                                    video_data = f"data:{content_type_header};base64,{encoded_video}"
+                                
+                                # 创建inline_data格式 (litellm标准格式)
+                                new_content = {
+                                    "type": "file",
+                                    "file": {
+                                        "file_data": video_data
+                                    }
+                                }
+                                new_formatted_message["content"].append(new_content)
+                            except Exception as e:
+                                # 如果获取失败，则使用原始URL格式
+                                to_append_text += f"![video]({video_url})"
                     else:
                         return False
                 elif content_type == "file_url":
