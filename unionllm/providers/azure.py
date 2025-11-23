@@ -123,7 +123,7 @@ class AzureAnthropicProvider(BaseProvider):
             clean['max_tokens'] = 30000
         
         if "reasoning_effort" in kwargs:
-            if kwargs.get("max_tokens") <= 1024:
+            if clean.get("max_tokens") <= 1024:
                 clean['max_tokens'] = 1025
             original_max = clean['max_tokens']    
             budget_tokens = original_max - 1 if original_max is not None else 2048
@@ -710,7 +710,21 @@ class AzureAnthropicProvider(BaseProvider):
                                 model=model,
                                 usage=None,
                                 stream=True,
-                            )                            
+                            )      
+                    elif delta_type == "signature_delta":
+                        signature_content = getattr(delta_obj, "signature", "")
+                        if signature_content:
+                            # Yield signature_content delta
+                            chunk_delta = Delta(thought_signature=signature_content)
+                            stream_choice = StreamingChoices(index=0, delta=chunk_delta)
+                            yield ModelResponse(
+                                id=msg_id,
+                                choices=[stream_choice],
+                                created=int(time.time()),
+                                model=model,
+                                usage=None,
+                                stream=True,
+                            )
 
             elif event_type == "content_block_stop":
                 # Content block completed
