@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "unionllm"
-version = "0.2.4"
+version = "0.2.5"
 description = "A Python library for unified access to all kinds of large language models."
 license = "MIT"
 homepage = "https://github.com/EvalsOne/UnionLLM"

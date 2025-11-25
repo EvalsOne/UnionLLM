@@ -347,12 +347,10 @@ class GeminiAIProvider(BaseProvider):
                 if msg.get("content"):
                     converted = self._try_convert_markdown_image_to_part(msg["content"])
                     if converted:
-                        try:
-                            converted.thought_signature = msg.get("thought_signature")
-                        except Exception:
-                            pass
-                        parts.append(converted)
-                    else:
+                        msg.content = converted
+                    if msg.get("thought_signature") and msg['thought_signature']:
+                        parts.append(types.Part(text=msg["content"], thought_signature=msg["thought_signature"]))
+                    else:               
                         parts.append(types.Part(text=msg["content"]))
                                         
                 # 处理工具调用
