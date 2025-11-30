@@ -347,12 +347,19 @@ class GeminiAIProvider(BaseProvider):
                 if msg.get("content"):
                     converted = self._try_convert_markdown_image_to_part(msg["content"])
                     if converted:
-                        msg.content = converted
-                    if msg.get("thought_signature") and msg['thought_signature']:
-                        parts.append(types.Part(text=msg["content"], thought_signature=msg["thought_signature"]))
-                    else:               
-                        parts.append(types.Part(text=msg["content"]))
-                                        
+                        parts.append(converted)
+                        if msg.get("thought_signature") and msg['thought_signature']:
+                            try:
+                                parts[-1].thought_signature = msg['thought_signature']
+                            except Exception:
+                                pass
+
+                    else:
+                        if msg.get("thought_signature") and msg['thought_signature']:
+                            parts.append(types.Part(text=msg["content"], thought_signature=msg["thought_signature"]))
+                        else:
+                            parts.append(types.Part(text=msg["content"]))
+                              
                 # 处理工具调用
                 if "tool_calls" in msg:
                     for tool_call in msg["tool_calls"]:
@@ -371,7 +378,7 @@ class GeminiAIProvider(BaseProvider):
                                     parts[-1].thought_signature = raw_ts
                             except Exception as e:
                                 raise GeminiError(status_code=500, message=f"Error processing tool_calls in stream: {str(e)}")
-                
+
                 if not parts:
                     parts = [types.Part(text="")]
                 processed_messages.append(types.Content(

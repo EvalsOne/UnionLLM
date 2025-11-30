@@ -272,7 +272,17 @@ class AzureAnthropicProvider(BaseProvider):
                         # Already Anthropic format, pass through
                         converted_content.append(content_block)
                     elif content_block.get("type") == "file_url":
-                        # Pass through file_url (may not be directly supported)
+                        # Convert file_url to document format
+                        converted_content.append(
+                            self._convert_file_url_to_anthropic(content_block)
+                        )
+                    elif content_block.get("type") == "file":
+                        # Convert file to document format
+                        converted_content.append(
+                            self._convert_file_to_anthropic(content_block)
+                        )
+                    elif content_block.get("type") == "document":
+                        # Already Anthropic format, pass through
                         converted_content.append(content_block)
                     elif content_block.get("type") == "tool_result":
                         # Already Anthropic format, pass through
@@ -417,6 +427,111 @@ class AzureAnthropicProvider(BaseProvider):
                 status_code=500,
                 message=f"Failed to download video from URL: {str(e)}"
             )
+
+    def _convert_file_url_to_anthropic(self, file_block: dict) -> dict:
+        """
+        Convert file_url block to Anthropic document block.
+        Supports URL-based files.
+
+        Input format:
+        {
+            "type": "file_url",
+            "file_url": {
+                "url": "https://..."
+            }
+        }
+
+        Output format:
+        {
+            "type": "document",
+            "source": {
+                "type": "url",
+                "url": "https://..."
+            }
+        }
+        """
+        file_url = file_block.get("file_url", {})
+        url = file_url.get("url", "")
+
+        if not url:
+            raise AzureProviderError(
+                status_code=422,
+                message="File URL is empty"
+            )
+
+        return {
+            "type": "document",
+            "source": {
+                "type": "url",
+                "url": url
+            }
+        }
+
+    def _convert_file_to_anthropic(self, file_block: dict) -> dict:
+        """
+        Convert file block to Anthropic document block.
+        Supports base64-encoded files.
+
+        Input format:
+        {
+            "type": "file",
+            "file": {
+                "file_data": "base64_encoded_data...",
+                "media_type": "application/pdf"  # optional
+            }
+        }
+
+        Output format:
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": "base64_encoded_data..."
+            }
+        }
+        """
+        file_info = file_block.get("file", {})
+        file_data = file_info.get("file_data", "")
+
+        if not file_data:
+            raise AzureProviderError(
+                status_code=422,
+                message="File data is empty"
+            )
+
+        # Determine media type
+        media_type = file_info.get("media_type", "application/pdf")
+
+        # Handle data URL format (e.g., "data:application/pdf;base64,JVBERi0...")
+        if file_data.startswith("data:"):
+            parts = file_data.split(",", 1)
+            if len(parts) == 2:
+                header_part = parts[0]  # "data:application/pdf;base64"
+                data_part = parts[1]
+
+                # Extract media type from header
+                if ":" in header_part and ";" in header_part:
+                    media_type = header_part.split(":")[1].split(";")[0]
+
+                return {
+                    "type": "document",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": data_part
+                    }
+                }
+
+        # Plain base64 data
+        return {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": file_data
+            }
+        }
 
     def _convert_tools_to_anthropic(self, tools: List[dict], tool_choice: Optional[str] = None) -> Dict[str, Any]:
         """
