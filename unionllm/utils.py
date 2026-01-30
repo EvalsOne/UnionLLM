@@ -319,7 +319,7 @@ def generate_unique_uid():
     return unique_uid
 
 def check_object_input_support(provider):
-    not_supported_providers = ["wenxin", "baichuan", "minimax", "xunfei", "tiangong", "lingyi", "fastgpt", "doubao", "moonshot"]
+    not_supported_providers = ["wenxin", "baichuan", "minimax", "xunfei", "tiangong", "lingyi", "fastgpt", "doubao"]
     if provider in not_supported_providers:
         return "NONE"
     elif provider == "coze":
@@ -349,6 +349,10 @@ def check_vision_input_support(provider, model):
 def check_video_input_support(provider, model):
     # supported_providers = ['zhipuai']
     if provider == "gemini":
+        # Gemini needs base64 video data converted to inline file parts.
+        return "INLINE_DATA"
+    elif provider == "moonshot":
+        # Moonshot supports OpenAI-style video_url parts (base64 data URI).
         return "FULL"
     else:
         return "PARTIAL"

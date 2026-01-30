@@ -23,7 +23,8 @@ class MinimaxAIProvider(BaseProvider):
             raise MinimaxOpenAIError(
                 status_code=422, message=f"Missing API key"
             )
-        self.endpoint_url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+        base_url = model_kwargs.get("base_url") or "https://api.minimax.chat/v1"
+        self.endpoint_url = model_kwargs.get("endpoint_url") or f"{base_url}/text/chatcompletion_v2"
 
     def pre_processing(self, **kwargs):
         supported_params = [

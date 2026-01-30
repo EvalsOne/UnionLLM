@@ -105,7 +105,7 @@ class BaseProvider(ABC):
                 
                 if has_video_input:
                     video_input_support = check_video_input_support(provider, model)
-                    if video_input_support == "FULL":
+                    if video_input_support == "INLINE_DATA":
                         reformat_video = 2
                         reformated = 1
                     elif video_input_support == "PARTIAL":

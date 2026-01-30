@@ -205,6 +205,7 @@ class GeminiAIProvider(BaseProvider):
         processed_messages = []
         stream_has_image = False
         for msg in messages:
+            print(f"Processing message: {msg}")
             if msg["role"] == "user":
                 # 支持 OpenAI 风格的多模态输入（content 为数组，含多张 image_url）
                 parts = []
@@ -486,7 +487,6 @@ class GeminiAIProvider(BaseProvider):
                 contents=processed_messages,
                 config=config
             )
-            
             index = 0
             final_usage_obj = None
             for chunk in response:
