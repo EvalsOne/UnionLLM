@@ -21,6 +21,7 @@ setup(
         'websocket_client',
         'requests',
         'litellm',
-        'google-genai'
+        'google-genai',
+        'anthropic'
     ],
 )
