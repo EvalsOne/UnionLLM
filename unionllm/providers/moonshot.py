@@ -28,7 +28,7 @@ class MoonshotAIProvider(BaseProvider):
             raise MoonshotOpenAIError(
                 status_code=422, message=f"Missing API key"
             )
-        self.base_url = model_kwargs.get("base_url") or "https://api.moonshot.cn/v1"
+        self.base_url = model_kwargs.get("api_base") or "https://api.moonshot.cn/v1"
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def _merge_extra_body(self, kwargs: dict, extra: dict) -> None:

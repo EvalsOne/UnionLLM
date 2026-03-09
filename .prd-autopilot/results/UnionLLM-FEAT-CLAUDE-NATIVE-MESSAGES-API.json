@@ -1,0 +1,29 @@
+{
+  "outcome": "in-review",
+  "summary": "Added native Anthropic Messages API support for Claude with streaming, multimodal image input, tool calling, prompt caching, and auth/base_url controls; integrated provider routing and tests.",
+  "blockers": [],
+  "validation": [
+    {
+      "command": "python -m pytest -q tests/test_anthropic_native_provider.py",
+      "ok": true,
+      "notes": "9 new Anthropic-native provider and routing tests passed."
+    },
+    {
+      "command": "python -m pytest -q",
+      "ok": true,
+      "notes": "Full test suite passed (21 passed, 1 skipped)."
+    }
+  ],
+  "files_changed": [
+    "unionllm/providers/anthropic.py",
+    "unionllm/main.py",
+    "tests/test_anthropic_native_provider.py",
+    "setup.py",
+    "pyproject.toml"
+  ],
+  "commit": {
+    "created": false,
+    "message": ""
+  },
+  "notes": "Implemented a new native `AnthropicAIProvider` for Claude via Anthropic Messages API and routed `provider=\"anthropic\"` to use it by default, with an optional fallback flag (`use_litellm_anthropic` / `UNIONLLM_USE_LITELLM_ANTHROPIC`) for rollback. The provider now supports non-stream + stream flows, OpenAI-format to Anthropic-format conversion for system/messages/text+image/tools/tool results, stream delta mapping (including tool call deltas and finish reasons), API key precedence (`api_key` over `ANTHROPIC_API_KEY`), custom `base_url`, and automatic prompt caching policy with per-request override controls. I validated the implementation with dedicated new tests and the full repository test suite, both passing."
+}
