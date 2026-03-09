@@ -75,6 +75,7 @@ class UnionLLM:
                 self.litellm_call_type = 1
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
+            print(f"kwargs: {kwargs}")
             if if_litellm_support:
                 self.provider_instance = litellm.LiteLLMProvider(**kwargs)
                 if support_type == 1:
