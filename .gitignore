@@ -178,3 +178,6 @@ pyrightconfig.json
 cookbook/
 tests/my
 dump.rdb
+
+# vbd system
+.prd-autopilot/
