@@ -56,6 +56,11 @@ class DouBaoAIProvider(BaseProvider):
                         chunk_delta.role = "assistant"
                         chunk_delta.content=new_line.get("result", "")
                         chunk_choices.append(StreamingChoices(index=index, delta=chunk_delta))
+                    elif new_line.get("choices"):
+                        for choice in new_line.get("choices", []):
+                            delta_raw = choice.get("delta", {})
+                            chunk_choices.append(StreamingChoices(index=index, delta=Delta(**delta_raw)))
+
                     if 'usage' in new_line:
                         chunk_usage = Usage()
                         if "input_tokens" in chunk_usage:
@@ -67,8 +72,11 @@ class DouBaoAIProvider(BaseProvider):
                     else:
                         chunk_usage = None
 
+                    if 'reasoning_content' in chunk_delta:
+                        chunk_delta.reasoning_content = chunk_delta['reasoning_content']
+
                     chunk_response = ModelResponse(
-                        id="hello",
+                        id=new_line.get("id"),
                         choices=chunk_choices,
                         created=int(time.time()),
                         model=model,

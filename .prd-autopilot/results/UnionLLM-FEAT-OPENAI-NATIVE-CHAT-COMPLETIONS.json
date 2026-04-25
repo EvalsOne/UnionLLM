@@ -1,0 +1,32 @@
+{
+  "outcome": "in-review",
+  "summary": "Implemented a native OpenAI provider for `provider=\"openai\"` so UnionLLM now calls the OpenAI SDK directly for chat by default and auto/selectively supports legacy completions for instruct models or `api_mode=\"completions\"`. The new provider normalizes `api_base`/`base_url`, prefers call-time `api_key` over `OPENAI_API_KEY`, maps streaming usage and errors with `request_id`, and leaves the no-provider LiteLLM path untouched as a rollback path. Validation: `python -m pytest -q tests/test_openai_native.py` and `python -m pytest -q` both passed; the suite still has one existing skipped placeholder test in `tests/test_unionchat.py`. Remaining risk: completions compatibility currently converts message lists into a plain-text prompt transcript, so nuanced multi-turn/tool contexts on the legacy endpoint are intentionally best-effort.",
+  "blockers": [],
+  "validation": [
+    {
+      "command": "python -m pytest -q tests/test_openai_native.py",
+      "ok": true,
+      "notes": "Passed 7 focused tests covering native routing, chat/completions mapping, streaming usage, base_url/api_key override handling, and request_id-aware error mapping."
+    },
+    {
+      "command": "python -m pytest -q",
+      "ok": true,
+      "notes": "Full test suite passed; 1 existing placeholder parameterized test remains skipped in tests/test_unionchat.py."
+    },
+    {
+      "command": "python - <<'PY' ... jsonschema.validate(...) ... PY",
+      "ok": true,
+      "notes": "Validated the saved result artifact against /private/var/www/prd/skills/prd-worker/assets/result.schema.json."
+    }
+  ],
+  "files_changed": [
+    "unionllm/main.py",
+    "unionllm/providers/openai_native.py",
+    "tests/test_openai_native.py"
+  ],
+  "commit": {
+    "created": false,
+    "message": ""
+  },
+  "notes": "Implemented a native OpenAI provider for `provider=\"openai\"` so UnionLLM now calls the OpenAI SDK directly for chat by default and auto/selectively supports legacy completions for instruct models or `api_mode=\"completions\"`. The new provider normalizes `api_base`/`base_url`, prefers call-time `api_key` over `OPENAI_API_KEY`, maps streaming usage and errors with `request_id`, and leaves the no-provider LiteLLM path untouched as a rollback path. Validation: `python -m pytest -q tests/test_openai_native.py` and `python -m pytest -q` both passed; the suite still has one existing skipped placeholder test in `tests/test_unionchat.py`. Remaining risk: completions compatibility currently converts message lists into a plain-text prompt transcript, so nuanced multi-turn/tool contexts on the legacy endpoint are intentionally best-effort."
+}

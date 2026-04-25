@@ -24,7 +24,7 @@ class LiteLLMProvider(BaseProvider):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base", "extra_headers"
+            "best_of", "logit_bias", "api_key", "api_secret", "api_url", "provider", "api_version", "api_base", "extra_headers", "thinking"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
@@ -62,8 +62,7 @@ class LiteLLMProvider(BaseProvider):
                     status_code=422, message=message_check_result['reason']
                 )
             
-            new_kwargs = self.pre_processing(**kwargs)
-                        
+            new_kwargs = self.pre_processing(**kwargs)                        
             stream = kwargs.get("stream", False)
 
             if stream:

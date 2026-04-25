@@ -29,16 +29,47 @@ class DeepSeekAIProvider(BaseProvider):
             self.base_url = "https://api.deepseek.com/v1"
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
+    def _merge_extra_body(self, kwargs: dict, extra: dict) -> None:
+        existing = kwargs.get("extra_body")
+        if existing is None:
+            kwargs["extra_body"] = dict(extra)
+            return
+        if not isinstance(existing, dict):
+            raise DeepSeekError(
+                status_code=422,
+                message="Invalid extra_body: must be a dict/object when using DeepSeek-specific params.",
+            )
+        merged = dict(existing)
+        merged.update(extra)
+        kwargs["extra_body"] = merged
+
     def pre_processing(self, **kwargs):
         # process the compatibility issue of parameters, all unsupported parameters are discarded
+        thinking = kwargs.pop("thinking", None)
+        reasoning_effort = kwargs.get("reasoning_effort")
+
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias", "tools", "tool_choice"
+            "best_of", "logit_bias", "tools", "tool_choice", "reasoning_effort", "extra_body"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
                 kwargs.pop(key)
+
+        extra_body = kwargs.get("extra_body")
+        if extra_body is not None and not isinstance(extra_body, dict):
+            raise DeepSeekError(
+                status_code=422,
+                message="Invalid extra_body: must be a dict/object when using DeepSeek-specific params.",
+            )
+
+        if thinking is not None:
+            self._merge_extra_body(kwargs, {"thinking": thinking})
+        elif reasoning_effort is not None and not (isinstance(extra_body, dict) and "thinking" in extra_body):
+            self._merge_extra_body(kwargs, {"thinking": {"type": "enabled"}})
+        elif not (isinstance(extra_body, dict) and "thinking" in extra_body):
+            self._merge_extra_body(kwargs, {"thinking": {"type": "disabled"}})
 
         return kwargs
     
@@ -67,7 +98,6 @@ class DeepSeekAIProvider(BaseProvider):
                 )
             new_kwargs = self.pre_processing(**kwargs)
             stream = kwargs.get("stream", False)
-
             if stream:
                 return self.post_stream_processing_wrapper(model=model, messages=messages, **new_kwargs)
             else:
@@ -76,7 +106,6 @@ class DeepSeekAIProvider(BaseProvider):
                 )
                 return self.create_model_response_wrapper(result, model=model)
         except Exception as e:
-            raise e
             if hasattr(e, "status_code"):
                 raise DeepSeekError(status_code=e.status_code, message=str(e))
             else:

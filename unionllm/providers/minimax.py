@@ -23,7 +23,8 @@ class MinimaxAIProvider(BaseProvider):
             raise MinimaxOpenAIError(
                 status_code=422, message=f"Missing API key"
             )
-        self.endpoint_url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
+        base_url = model_kwargs.get("api_base") or "https://api.minimax.chat/v1"
+        self.endpoint_url = model_kwargs.get("endpoint_url") or f"{base_url}/text/chatcompletion_v2"
 
     def pre_processing(self, **kwargs):
         supported_params = [
@@ -58,7 +59,34 @@ class MinimaxAIProvider(BaseProvider):
                                 chunk_delta.role = choice['delta']["role"]
                             if "content" in choice['delta']:
                                 chunk_delta.content = choice['delta']["content"]
-                            chunk_choices.append(StreamingChoices(index=choice['index'], delta=chunk_delta))
+                            
+                            # Add tool_calls support
+                            if 'tool_calls' in choice['delta'] and choice['delta']['tool_calls']:
+                                tool_calls = []
+                                for tool_call in choice['delta']['tool_calls']:
+                                    tool_calls.append(
+                                        {
+                                            "id": tool_call['id'] if 'id' in tool_call and tool_call['id'] else None,
+                                            "index": tool_call['index'] if 'index' in tool_call else 0,
+                                            "type": "function",
+                                            "function": {
+                                                "name": tool_call['function']['name'] if 'function' in tool_call and 'name' in tool_call['function'] else None,
+                                                "arguments": tool_call['function']['arguments'] if 'function' in tool_call and 'arguments' in tool_call['function'] else None
+                                            }
+                                        }
+                                    )
+                                chunk_delta.tool_calls = tool_calls
+                            
+                            if 'reasoning_content' in choice['delta']:
+                                chunk_delta.reasoning_content = choice['delta']['reasoning_content']
+                            
+                            stream_choices = StreamingChoices(index=choice['index'], delta=chunk_delta)
+                            if 'finish_reason' in choice:
+                                if choice['finish_reason'] is not None and choice['finish_reason'] != 'null':
+                                    stream_choices.finish_reason = choice['finish_reason']
+                                else:
+                                    stream_choices.finish_reason = None
+                            chunk_choices.append(stream_choices)
                     if "usage" in data:
                         chunk_usage = Usage()
                         if "total_tokens" in data["usage"]:
@@ -82,6 +110,24 @@ class MinimaxAIProvider(BaseProvider):
                 content=choice["message"]["content"],
                 role=choice["message"]["role"]
             )
+            
+            # Add tool_calls support
+            if 'tool_calls' in choice["message"] and choice["message"]['tool_calls']:
+                tool_calls = []
+                for tool_call in choice["message"]['tool_calls']:
+                    tool_calls.append(
+                        {
+                            "id": tool_call['id'] if 'id' in tool_call and tool_call['id'] else None,
+                            "index": tool_call['index'] if 'index' in tool_call else 0,
+                            "type": "function",
+                            "function": {
+                                "name": tool_call['function']['name'] if 'function' in tool_call and 'name' in tool_call['function'] else None,
+                                "arguments": tool_call['function']['arguments'] if 'function' in tool_call and 'arguments' in tool_call['function'] else None
+                            }
+                        }
+                    )
+                message.tool_calls = tool_calls
+            
             choices.append(
                 Choices(
                     message=message,

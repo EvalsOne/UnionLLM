@@ -177,3 +177,4 @@ pyrightconfig.json
 
 cookbook/
 tests/my
+dump.rdb
