@@ -181,3 +181,6 @@ dump.rdb
 
 # vbd system
 .prd-autopilot/
+.worktrees/
+
+DS_Store

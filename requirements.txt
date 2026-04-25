@@ -5,7 +5,6 @@ requests  # normalize package name to lowercase
 setuptools
 tenacity
 websocket_client
-zhipuai
 litellm
 google-genai
 anthropic

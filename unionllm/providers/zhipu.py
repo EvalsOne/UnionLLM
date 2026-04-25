@@ -1,7 +1,7 @@
-import json
 from .base_provider import BaseProvider
-from zhipuai import ZhipuAI
-import logging, os
+from openai import OpenAI
+import os
+
 
 class ZhiPuOpenAIError(Exception):
     def __init__(
@@ -13,6 +13,7 @@ class ZhiPuOpenAIError(Exception):
         self.message = message
         super().__init__(self.message)
 
+
 class ZhipuAIProvider(BaseProvider):
     def __init__(self, **model_kwargs):
         # Get ZHIPU_API_KEY from environment variables
@@ -22,21 +23,48 @@ class ZhipuAIProvider(BaseProvider):
             raise ZhiPuOpenAIError(
                 status_code=422, message=f"Missing API key"
             )
-        self.client = ZhipuAI(api_key=self.api_key)
+        self.base_url = model_kwargs.get("api_base") or "https://open.bigmodel.cn/api/paas/v4"
+        self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
 
     def pre_processing(self, **kwargs):
+        # process the compatibility issue of parameters, all unsupported parameters are discarded
         supported_params = [
-            "model", "messages", "max_tokens", "temperature", "n",
-            "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias", "tools", "tool_choice"
+            "model",
+            "messages",
+            "max_tokens",
+            "max_completion_tokens",
+            "temperature",
+            "top_p",
+            "n",
+            "logprobs",
+            "top_logprobs",
+            "stream",
+            "stop",
+            "presence_penalty",
+            "frequency_penalty",
+            "best_of",
+            "logit_bias",
+            "tools",
+            "tool_choice",
+            "parallel_tool_calls",
+            "seed",
+            "response_format",
+            "user",
+            "extra_headers",
+            "extra_query",
+            "extra_body",
+            "timeout",
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
                 kwargs.pop(key)
         return kwargs
 
-    def post_stream_processing_wrapper(self, response):
-        return self.post_stream_processing(response)
+    def post_stream_processing_wrapper(self, model, messages, **new_kwargs):
+        result = self.client.chat.completions.create(
+            model=model, messages=messages, **new_kwargs
+        )
+        return self.post_stream_processing(result, model=model)
 
     def create_model_response_wrapper(self, result, model):
         return self.create_model_response(result, model=model)
@@ -60,10 +88,9 @@ class ZhipuAIProvider(BaseProvider):
             stream = new_kwargs.get("stream", False)
 
             if stream:
-                response = self.client.chat.completions.create(
+                return self.post_stream_processing_wrapper(
                     model=model, messages=messages, **new_kwargs
                 )
-                return self.post_stream_processing_wrapper(response)
             else:
                 result = self.client.chat.completions.create(
                     model=model, messages=messages, **new_kwargs
