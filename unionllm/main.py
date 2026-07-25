@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 
 class UnionLLM:
     def __init__(self, provider: Optional[str] = None, **kwargs):
+        print(f"Initializing UnionLLM with provider: {provider}, kwargs: {kwargs}")
         self.provider = provider.lower() if provider else None
         self.litellm_call_type = None
         if self.provider == "zhipuai":
@@ -73,6 +74,7 @@ class UnionLLM:
                 self.litellm_call_type = 1
             else:
                 self.provider_instance = anthropic.AnthropicAIProvider(**kwargs)
+            print(f"Using {'LiteLLM' if use_litellm_anthropic else 'Anthropic'} provider for Anthropic models.")
         elif self.provider == "azure":
             model = kwargs.get("model")
             # 对于 Claude 系列，使用 Azure 原生（Anthropic Foundry）调用

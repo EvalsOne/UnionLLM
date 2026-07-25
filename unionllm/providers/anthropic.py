@@ -20,15 +20,10 @@ class AnthropicProviderError(Exception):
 class AnthropicAIProvider(BaseProvider):
     DEFAULT_BASE_URL = "https://api.anthropic.com"
     DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-    DEFAULT_MAX_TOKENS = 1024
-    DEFAULT_CACHE_POLICY = {
-        "system": True,
-        "tools": True,
-        "long_user_prefix": True,
-        "min_chars": 1024,
-        "cache_type": "ephemeral",
-    }
-
+    # Anthropic requires max_tokens.  ConsoleX normally omits it for a regular
+    # chat turn, so 1024 here silently cut otherwise normal answers short.
+    # Keep the provider fallback aligned with ConsoleX's general chat default.
+    DEFAULT_MAX_TOKENS = 8192
     def __init__(self, **kwargs):
         try:
             from anthropic import Anthropic
@@ -205,7 +200,11 @@ class AnthropicAIProvider(BaseProvider):
                 converted_messages.append({"role": "assistant", "content": converted_content})
                 continue
 
-            converted_msg = {k: v for k, v in message.items() if k not in ["content", "tool_calls"]}
+            # ConsoleX history adds UI bookkeeping fields (for example
+            # ``messageIndex``).  Anthropic's Messages API only accepts
+            # ``role`` and ``content`` at the message level, so never forward
+            # arbitrary OpenAI/UI fields here.
+            converted_msg = {"role": role}
             content = message.get("content")
             if isinstance(content, str):
                 converted_msg["content"] = content
@@ -399,197 +398,6 @@ class AnthropicAIProvider(BaseProvider):
 
         return result
 
-    def _is_cache_enabled(self, value: Any) -> bool:
-        if isinstance(value, str):
-            return value.strip().lower() not in ("0", "false", "off", "no", "disabled")
-        return bool(value)
-
-    def _normalize_cache_policy(self, **kwargs) -> Optional[Dict[str, Any]]:
-        if "enable_prompt_cache" in kwargs:
-            if not self._is_cache_enabled(kwargs.get("enable_prompt_cache")):
-                return None
-        elif kwargs.get("cache_policy") is None:
-            # default automatic cache policy
-            pass
-
-        policy = dict(self.DEFAULT_CACHE_POLICY)
-        cache_policy = kwargs.get("cache_policy", "auto")
-
-        if isinstance(cache_policy, bool):
-            if not cache_policy:
-                return None
-        elif isinstance(cache_policy, str):
-            cache_policy_name = cache_policy.strip().lower()
-            if cache_policy_name in ("off", "none", "disabled", "false"):
-                return None
-            if cache_policy_name in ("system", "system_only"):
-                policy["tools"] = False
-                policy["long_user_prefix"] = False
-            elif cache_policy_name in ("tools", "tools_only"):
-                policy["system"] = False
-                policy["long_user_prefix"] = False
-            elif cache_policy_name in ("messages", "message", "prefix", "prefix_only"):
-                policy["system"] = False
-                policy["tools"] = False
-        elif isinstance(cache_policy, dict):
-            if "system" in cache_policy:
-                policy["system"] = bool(cache_policy.get("system"))
-            if "tools" in cache_policy:
-                policy["tools"] = bool(cache_policy.get("tools"))
-            if "long_user_prefix" in cache_policy:
-                policy["long_user_prefix"] = bool(cache_policy.get("long_user_prefix"))
-            elif "messages" in cache_policy:
-                policy["long_user_prefix"] = bool(cache_policy.get("messages"))
-            if cache_policy.get("min_chars") is not None:
-                try:
-                    policy["min_chars"] = max(1, int(cache_policy.get("min_chars")))
-                except Exception:
-                    policy["min_chars"] = self.DEFAULT_CACHE_POLICY["min_chars"]
-            if cache_policy.get("cache_type"):
-                policy["cache_type"] = str(cache_policy.get("cache_type"))
-
-        if kwargs.get("cache_min_chars") is not None:
-            try:
-                policy["min_chars"] = max(1, int(kwargs.get("cache_min_chars")))
-            except Exception:
-                policy["min_chars"] = self.DEFAULT_CACHE_POLICY["min_chars"]
-
-        if kwargs.get("cache_control_type"):
-            policy["cache_type"] = str(kwargs.get("cache_control_type"))
-
-        if not policy.get("system") and not policy.get("tools") and not policy.get("long_user_prefix"):
-            return None
-        return policy
-
-    def _ensure_cache_control(self, block: dict, cache_type: str) -> dict:
-        if not isinstance(block, dict):
-            return block
-        if block.get("cache_control"):
-            return block
-        new_block = dict(block)
-        new_block["cache_control"] = {"type": cache_type}
-        return new_block
-
-    def _apply_cache_to_system(self, system_payload: Any, cache_type: str) -> Any:
-        if not system_payload:
-            return system_payload
-
-        if isinstance(system_payload, str):
-            return [
-                {
-                    "type": "text",
-                    "text": system_payload,
-                    "cache_control": {"type": cache_type},
-                }
-            ]
-
-        if isinstance(system_payload, dict):
-            return [self._ensure_cache_control(system_payload, cache_type)]
-
-        if isinstance(system_payload, list):
-            new_system = [dict(block) if isinstance(block, dict) else block for block in system_payload]
-            for index in range(len(new_system) - 1, -1, -1):
-                block = new_system[index]
-                if isinstance(block, dict):
-                    new_system[index] = self._ensure_cache_control(block, cache_type)
-                    return new_system
-            return new_system
-
-        return system_payload
-
-    def _apply_cache_to_tools(self, tools: List[dict], cache_type: str) -> List[dict]:
-        updated_tools = []
-        for tool in tools:
-            if isinstance(tool, dict):
-                updated_tools.append(self._ensure_cache_control(tool, cache_type))
-            else:
-                updated_tools.append(tool)
-        return updated_tools
-
-    def _apply_cache_to_messages(self, messages: List[dict], min_chars: int, cache_type: str) -> List[dict]:
-        new_messages = [dict(msg) if isinstance(msg, dict) else msg for msg in messages]
-
-        for msg_index, message in enumerate(new_messages):
-            if not isinstance(message, dict) or message.get("role") != "user":
-                continue
-
-            content = message.get("content")
-            if isinstance(content, str):
-                if len(content) < min_chars:
-                    continue
-                new_messages[msg_index]["content"] = [
-                    {
-                        "type": "text",
-                        "text": content,
-                        "cache_control": {"type": cache_type},
-                    }
-                ]
-                return new_messages
-
-            if not isinstance(content, list):
-                continue
-
-            text_len = 0
-            for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text_len += len(str(block.get("text", "")))
-            if text_len < min_chars:
-                continue
-
-            new_content = [dict(block) if isinstance(block, dict) else block for block in content]
-            target_index = None
-            for index in range(len(new_content) - 1, -1, -1):
-                block = new_content[index]
-                if isinstance(block, dict) and block.get("type") in (
-                    "text",
-                    "image",
-                    "document",
-                    "tool_result",
-                    "tool_use",
-                ):
-                    target_index = index
-                    break
-
-            if target_index is None:
-                continue
-
-            target_block = new_content[target_index]
-            if isinstance(target_block, dict):
-                new_content[target_index] = self._ensure_cache_control(target_block, cache_type)
-            new_messages[msg_index]["content"] = new_content
-            return new_messages
-
-        return new_messages
-
-    def _apply_prompt_cache(
-        self,
-        messages: List[dict],
-        params: Dict[str, Any],
-        **kwargs,
-    ) -> Tuple[List[dict], Dict[str, Any]]:
-        policy = self._normalize_cache_policy(**kwargs)
-        if not policy:
-            return messages, params
-
-        cache_type = policy.get("cache_type", "ephemeral")
-        updated_params = dict(params)
-        updated_messages = messages
-
-        if policy.get("system") and updated_params.get("system"):
-            updated_params["system"] = self._apply_cache_to_system(updated_params.get("system"), cache_type)
-
-        if policy.get("tools") and updated_params.get("tools"):
-            updated_params["tools"] = self._apply_cache_to_tools(updated_params.get("tools"), cache_type)
-
-        if policy.get("long_user_prefix"):
-            updated_messages = self._apply_cache_to_messages(
-                messages,
-                min_chars=int(policy.get("min_chars", self.DEFAULT_CACHE_POLICY["min_chars"])),
-                cache_type=cache_type,
-            )
-
-        return updated_messages, updated_params
-
     def _build_usage(self, usage_payload: Any, prompt_tokens_hint: Optional[int] = None) -> Optional[Usage]:
         if usage_payload is None and prompt_tokens_hint is None:
             return None
@@ -634,6 +442,11 @@ class AnthropicAIProvider(BaseProvider):
             )
 
         params = self._preprocess(**kwargs)
+        cache_control = kwargs.get("cache_control")
+        if cache_control:
+            # Anthropic's current automatic prompt-caching API receives this
+            # control at the top level of Messages.create().
+            params["cache_control"] = cache_control
         if system_message:
             params["system"] = system_message
 
@@ -649,7 +462,6 @@ class AnthropicAIProvider(BaseProvider):
                     status_code=500, message=f"Failed to convert tools format: {str(e)}"
                 )
 
-        anthropic_messages, params = self._apply_prompt_cache(anthropic_messages, params, **kwargs)
         return anthropic_messages, params
 
     def create_model_response_wrapper(self, anthropic_resp: Any, model: str) -> ModelResponse:

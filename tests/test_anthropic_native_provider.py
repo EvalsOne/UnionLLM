@@ -99,7 +99,7 @@ def test_convert_openai_messages_supports_system_image_and_tools(monkeypatch):
     assert converted[2]["content"][0]["type"] == "tool_result"
 
 
-def test_prepare_request_applies_automatic_prompt_cache(monkeypatch):
+def test_prepare_request_keeps_cache_control_top_level(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     provider = AnthropicAIProvider()
 
@@ -122,15 +122,41 @@ def test_prepare_request_applies_automatic_prompt_cache(monkeypatch):
         messages,
         tools=tools,
         tool_choice="required",
-        enable_prompt_cache=True,
-        cache_min_chars=10,
+        cache_control={"type": "ephemeral"},
     )
 
-    assert isinstance(params["system"], list)
-    assert params["system"][0]["cache_control"]["type"] == "ephemeral"
-    assert params["tools"][0]["cache_control"]["type"] == "ephemeral"
+    assert params["cache_control"] == {"type": "ephemeral"}
+    assert params["system"] == "system prompt"
     assert params["tool_choice"]["type"] == "any"
-    assert converted_messages[0]["content"][0]["cache_control"]["type"] == "ephemeral"
+    assert all("cache_control" not in tool for tool in params["tools"])
+    assert converted_messages[0]["content"] == "this is a long prompt prefix for cache"
+
+
+def test_prepare_request_uses_sensible_anthropic_max_tokens_default(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+
+    _, params = provider._prepare_request([{"role": "user", "content": "hello"}])
+
+    assert params["max_tokens"] == 8192
+
+
+def test_prepare_request_removes_consolex_message_bookkeeping(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+
+    converted_messages, _ = provider._prepare_request(
+        [
+            {
+                "role": "user",
+                "content": "hello",
+                "messageIndex": 0,
+                "name": "ConsoleX",
+            }
+        ]
+    )
+
+    assert converted_messages == [{"role": "user", "content": "hello"}]
 
 
 def test_create_model_response_maps_tool_calls_and_cache_usage(monkeypatch):
@@ -251,7 +277,7 @@ def test_non_stream_completion_sends_tools_and_returns_text(monkeypatch):
             }
         ],
         tool_choice="required",
-        enable_prompt_cache=False,
+        cache_control={"type": "ephemeral"},
         max_tokens=256,
     )
 
@@ -259,6 +285,8 @@ def test_non_stream_completion_sends_tools_and_returns_text(monkeypatch):
     assert sent["tool_choice"] == {"type": "any"}
     assert sent["tools"][0]["name"] == "lookup"
     assert sent["system"] == "sys"
+    assert sent["cache_control"] == {"type": "ephemeral"}
+    assert sent["messages"][0]["content"] == "hello"
     assert response.choices[0].message.content == "hello world"
     assert response.choices[0].finish_reason == "stop"
 
@@ -275,6 +303,28 @@ def test_unionllm_routes_anthropic_to_native_provider(monkeypatch):
     client = UnionLLM(provider="anthropic")
     assert isinstance(client.provider_instance, FakeAnthropicProvider)
     assert client.litellm_call_type is None
+
+
+def test_unionllm_passes_top_level_cache_control_to_native_provider(monkeypatch):
+    class FakeAnthropicProvider:
+        def __init__(self, **kwargs):
+            self.calls = []
+
+        def completion(self, model, messages, **kwargs):
+            self.calls.append((model, messages, kwargs))
+            return "ok"
+
+    monkeypatch.setattr("unionllm.main.anthropic.AnthropicAIProvider", FakeAnthropicProvider)
+    client = UnionLLM(provider="anthropic")
+
+    result = client.completion(
+        model="claude-3-5-sonnet",
+        messages=[{"role": "user", "content": "hello"}],
+        cache_control={"type": "ephemeral"},
+    )
+
+    assert result == "ok"
+    assert client.provider_instance.calls[0][2]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_unionllm_can_fallback_to_litellm_for_anthropic(monkeypatch):
