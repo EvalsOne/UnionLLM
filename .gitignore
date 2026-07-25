@@ -183,4 +183,5 @@ dump.rdb
 .prd-autopilot/
 .worktrees/
 
-DS_Store
+# DS_Store
+.DS_Store
