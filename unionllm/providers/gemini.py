@@ -1,6 +1,8 @@
 from .base_provider import BaseProvider
 from unionllm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 from google import genai
+import hashlib
+import logging
 import os, json, time
 from google.genai import types
 from PIL import Image
@@ -28,6 +30,7 @@ class GeminiAIProvider(BaseProvider):
                 status_code=422, message=f"Missing API key"
             )
         self.client = genai.Client(api_key=self.api_key) 
+        self._context_caches = {}
 
     def pre_processing(self, **kwargs):
         supported_params = [
@@ -39,12 +42,126 @@ class GeminiAIProvider(BaseProvider):
             # 兼容思考相关参数
             "thinking_level", "thinking",
             "aspect_ratio", "resolution",
-            "google_search_grounding"
+            "google_search_grounding",
+            "enable_context_cache", "context_cache_min_tokens",
+            "context_cache_ttl_seconds",
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
                 kwargs.pop(key)
         return kwargs
+
+    @staticmethod
+    def _as_bool(value):
+        if isinstance(value, str):
+            return value.strip().lower() in {"1", "true", "yes", "on"}
+        return bool(value)
+
+    @staticmethod
+    def _content_cache_fingerprint(contents):
+        serialized = []
+        for content in contents:
+            if hasattr(content, "model_dump"):
+                serialized.append(content.model_dump(mode="json"))
+            elif hasattr(content, "dict"):
+                serialized.append(content.dict())
+            else:
+                serialized.append(content)
+        return json.dumps(serialized, ensure_ascii=False, sort_keys=True, default=str)
+
+    def _prepare_context_cache(self, model, contents, config, new_kwargs):
+        """Cache a stable conversation prefix and return only the uncached suffix.
+
+        Gemini's implicit cache is opportunistic.  For a long agentic request
+        the same prefix is repeatedly sent while tools run, so an explicit,
+        short-lived cachedContent makes the cache use deterministic.  The
+        caller's auto-caching setting is the opt-in and failure is deliberately
+        non-fatal: unsupported models/accounts continue with a normal request.
+        """
+        if not self._as_bool(new_kwargs.get("enable_context_cache")):
+            return contents
+        if len(contents) < 2:
+            return contents
+
+        prefix = contents[:-1]
+        prefix_json = self._content_cache_fingerprint(prefix)
+        min_tokens = new_kwargs.get(
+            "context_cache_min_tokens",
+            os.environ.get("GEMINI_CONTEXT_CACHE_MIN_TOKENS", "4096"),
+        )
+        try:
+            min_tokens = max(1, int(min_tokens))
+        except (TypeError, ValueError):
+            min_tokens = 4096
+        # A token-count API call before every provider request adds latency. This
+        # conservative estimate only determines whether cache creation is worth
+        # attempting; Gemini remains the source of truth for the actual count.
+        if len(prefix_json) < min_tokens * 4:
+            return contents
+
+        cache_record = self._context_caches.get(prefix_json)
+        cache_name = cache_record.get("name") if cache_record else None
+        if not cache_name:
+            try:
+                ttl_seconds = new_kwargs.get(
+                    "context_cache_ttl_seconds",
+                    os.environ.get("GEMINI_CONTEXT_CACHE_TTL_SECONDS", "300"),
+                )
+                ttl_seconds = max(60, int(ttl_seconds))
+                cache = self.client.caches.create(
+                    model=model,
+                    config=types.CreateCachedContentConfig(
+                        contents=prefix,
+                        system_instruction=getattr(config, "system_instruction", None),
+                        tools=getattr(config, "tools", None),
+                        tool_config=getattr(config, "tool_config", None),
+                        ttl=f"{ttl_seconds}s",
+                    ),
+                )
+                cache_name = getattr(cache, "name", None)
+                if not cache_name:
+                    logging.warning("Gemini context cache create returned no cache name")
+                    return contents
+                self._context_caches[prefix_json] = {"name": cache_name}
+            except Exception as cache_error:
+                logging.info("Gemini context cache unavailable; using normal request: %s", cache_error)
+                return contents
+
+        # cachedContent owns the system instruction and tool declarations. The
+        # generate request may only contain the suffix that follows the prefix.
+        config.cached_content = cache_name
+        config.system_instruction = None
+        config.tools = None
+        config.tool_config = None
+        return contents[-1:]
+
+    @staticmethod
+    def _attach_cached_content_usage(usage, usage_metadata):
+        """Preserve Gemini's cache-read count in the OpenAI-compatible usage.
+
+        The Google SDK exposes this as ``cached_content_token_count``.  Without
+        copying it here, downstream consumers only see prompt/completion tokens
+        and cannot distinguish an unreported cache value from an actual zero.
+        """
+        if usage is None or usage_metadata is None:
+            return usage
+
+        cached_tokens = getattr(usage_metadata, "cached_content_token_count", None)
+        if cached_tokens is None and isinstance(usage_metadata, dict):
+            cached_tokens = usage_metadata.get(
+                "cached_content_token_count",
+                usage_metadata.get("cachedContentTokenCount"),
+            )
+        if cached_tokens is None:
+            return usage
+
+        try:
+            usage.cached_content_token_count = int(cached_tokens)
+        except (TypeError, ValueError):
+            # Keep the provider value visible; the consumer performs its own
+            # safe numeric coercion.
+            usage.cached_content_token_count = cached_tokens
+        return usage
 
     def _build_config(self, new_kwargs: dict, stream: bool = False, multimodal: bool = False, has_image: bool = False):
         """抽象出在流式与非流式里重复的 GenerateContentConfig 构建逻辑。
@@ -205,7 +322,6 @@ class GeminiAIProvider(BaseProvider):
         processed_messages = []
         stream_has_image = False
         for msg in messages:
-            print(f"Processing message: {msg}")
             if msg["role"] == "user":
                 # 支持 OpenAI 风格的多模态输入（content 为数组，含多张 image_url）
                 parts = []
@@ -389,12 +505,20 @@ class GeminiAIProvider(BaseProvider):
             elif msg["role"] == "tool":
                 # 处理工具响应消息
                 try:
-                    function_response = types.FunctionResponse(
-                        name=msg.get("name", ""),
-                        response={"result": msg.get("content", "")}
-                    )
+                    function_response_kwargs = {
+                        "name": msg.get("name", ""),
+                        "response": {"result": msg.get("content", "")},
+                    }
+                    # Gemini correlates the function result with the preceding
+                    # function call by id when one is available.
+                    if msg.get("tool_call_id"):
+                        function_response_kwargs["id"] = msg["tool_call_id"]
+                    function_response = types.FunctionResponse(**function_response_kwargs)
                     processed_messages.append(types.Content(
-                        role="function",
+                        # Function responses are user-supplied input in the
+                        # Gemini generateContent protocol. "function" is not a
+                        # valid Content role (Gemini 3.6 validates this).
+                        role="user",
                         parts=[types.Part(function_response=function_response)]
                     ))
                 except Exception as e:
@@ -482,9 +606,15 @@ class GeminiAIProvider(BaseProvider):
 
         try:
             # 使用 generate_content_stream 方法
+            request_contents = self._prepare_context_cache(
+                model,
+                processed_messages,
+                config,
+                new_kwargs,
+            )
             response = self.client.models.generate_content_stream(
                 model=model,
-                contents=processed_messages,
+                contents=request_contents,
                 config=config
             )
             index = 0
@@ -621,6 +751,7 @@ class GeminiAIProvider(BaseProvider):
                             final_usage_obj.image_completion_tokens = image_completion_tokens
                         except Exception:
                             pass
+                        self._attach_cached_content_usage(final_usage_obj, um)
                     except Exception as e:
                         raise GeminiError(status_code=500, message=f"Error extracting usage metadata in stream: {str(e)}")
 
@@ -759,6 +890,7 @@ class GeminiAIProvider(BaseProvider):
                     usage_obj.image_completion_tokens = image_completion_tokens
                 except Exception:
                     pass
+                self._attach_cached_content_usage(usage_obj, um)
             except Exception as e:
                 raise GeminiError(status_code=500, message=f"Error extracting usage metadata: {str(e)}")
 
