@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 from typing import Any, List, Optional
-from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini, azure
+from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini, azure, anthropic
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
 
@@ -64,6 +64,15 @@ class UnionLLM:
             self.provider_instance = deepseek.DeepSeekAIProvider(**kwargs)
         elif self.provider == "gemini": 
             self.provider_instance = gemini.GeminiAIProvider(**kwargs)    
+        elif self.provider == "anthropic":
+            use_litellm_anthropic = kwargs.get("use_litellm_anthropic")
+            if use_litellm_anthropic is None:
+                use_litellm_anthropic = os.getenv("UNIONLLM_USE_LITELLM_ANTHROPIC", "").lower() in ("1", "true", "yes")
+            if use_litellm_anthropic:
+                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
+                self.litellm_call_type = 1
+            else:
+                self.provider_instance = anthropic.AnthropicAIProvider(**kwargs)
         elif self.provider == "azure":
             model = kwargs.get("model")
             # 对于 Claude 系列，使用 Azure 原生（Anthropic Foundry）调用
