@@ -23,7 +23,7 @@ class AnthropicAIProvider(BaseProvider):
     # Anthropic requires max_tokens.  ConsoleX normally omits it for a regular
     # chat turn, so 1024 here silently cut otherwise normal answers short.
     # Keep the provider fallback aligned with ConsoleX's general chat default.
-    DEFAULT_MAX_TOKENS = 8192
+    DEFAULT_MAX_TOKENS = 16384
     def __init__(self, **kwargs):
         try:
             from anthropic import Anthropic

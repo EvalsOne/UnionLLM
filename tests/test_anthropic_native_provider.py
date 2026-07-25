@@ -138,7 +138,7 @@ def test_prepare_request_uses_sensible_anthropic_max_tokens_default(monkeypatch)
 
     _, params = provider._prepare_request([{"role": "user", "content": "hello"}])
 
-    assert params["max_tokens"] == 8192
+    assert params["max_tokens"] == 16384
 
 
 def test_prepare_request_removes_consolex_message_bookkeeping(monkeypatch):

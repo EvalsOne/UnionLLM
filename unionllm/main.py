@@ -4,7 +4,7 @@ import os
 from functools import partial
 
 from typing import Any, List, Optional
-from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini, azure, anthropic
+from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini, azure, anthropic, openai_native
 from .exceptions import ProviderError
 # from litellm import completion as litellm_completion
 
@@ -84,6 +84,8 @@ class UnionLLM:
                 # 其余模型走现有 Litellm 兼容路径
                 self.provider_instance = litellm.LiteLLMProvider(**kwargs)
                 self.litellm_call_type = 1
+        elif self.provider == "openai":
+            self.provider_instance = openai_native.OpenAINativeProvider(**kwargs)
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
