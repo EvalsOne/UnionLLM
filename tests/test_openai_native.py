@@ -33,7 +33,7 @@ def build_mock_client(*, chat_response=None, completion_response=None):
     return client
 
 
-def build_chat_response(content="hello"):
+def build_chat_response(content="hello", usage=None):
     return ChatCompletion(
         id="chatcmpl-1",
         choices=[
@@ -46,7 +46,7 @@ def build_chat_response(content="hello"):
         created=1,
         model="gpt-4o",
         object="chat.completion",
-        usage=CompletionUsage(prompt_tokens=2, completion_tokens=3, total_tokens=5),
+        usage=usage or CompletionUsage(prompt_tokens=2, completion_tokens=3, total_tokens=5),
     )
 
 
@@ -123,7 +123,13 @@ def test_unionllm_routes_openai_to_native_provider(monkeypatch):
 
 def test_chat_non_stream_uses_env_key_default_base_and_forwards_openai_params(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "env-key")
-    mock_client = build_mock_client(chat_response=build_chat_response("native hello"))
+    usage = CompletionUsage(
+        prompt_tokens=2,
+        completion_tokens=3,
+        total_tokens=5,
+        prompt_tokens_details={"cached_tokens": 1},
+    )
+    mock_client = build_mock_client(chat_response=build_chat_response("native hello", usage=usage))
     openai_ctor = MagicMock(return_value=mock_client)
     monkeypatch.setattr("unionllm.providers.openai_native.OpenAI", openai_ctor)
 
@@ -144,11 +150,17 @@ def test_chat_non_stream_uses_env_key_default_base_and_forwards_openai_params(mo
     assert create_kwargs["response_format"] == {"type": "json_object"}
     assert result.choices[0].message.content == "native hello"
     assert result.usage.total_tokens == 5
+    assert result.usage.cache_read_input_tokens == 1
 
 
 def test_chat_stream_maps_deltas_finish_reason_and_usage(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "env-key")
-    usage = CompletionUsage(prompt_tokens=2, completion_tokens=3, total_tokens=5)
+    usage = CompletionUsage(
+        prompt_tokens=2,
+        completion_tokens=3,
+        total_tokens=5,
+        prompt_tokens_details={"cached_tokens": 1},
+    )
     mock_client = build_mock_client(
         chat_response=iter(
             [
@@ -179,6 +191,7 @@ def test_chat_stream_maps_deltas_finish_reason_and_usage(monkeypatch):
     assert chunks[1].choices[0].delta.content == "lo"
     assert chunks[2].choices[0].finish_reason == "stop"
     assert chunks[3].usage.total_tokens == 5
+    assert chunks[3].usage.cache_read_input_tokens == 1
 
 
 def test_call_time_api_key_and_base_url_override_default_client(monkeypatch):

@@ -153,6 +153,23 @@ class OpenAINativeProvider(BaseProvider):
             params["stream_options"] = merged
         return params
 
+    @staticmethod
+    def _map_cached_tokens_to_usage(usage):
+        """Expose OpenAI prompt-cache hits in UnionLLM's top-level usage contract."""
+        if usage is None:
+            return usage
+
+        prompt_token_details = getattr(usage, "prompt_tokens_details", None)
+        if hasattr(prompt_token_details, "model_dump"):
+            prompt_token_details = prompt_token_details.model_dump()
+        if not isinstance(prompt_token_details, dict):
+            return usage
+
+        cached_tokens = prompt_token_details.get("cached_tokens")
+        if cached_tokens is not None:
+            usage.cache_read_input_tokens = cached_tokens
+        return usage
+
     def _preprocess_chat_params(self, **kwargs) -> dict:
         return {key: value for key, value in kwargs.items() if key in self.CHAT_SUPPORTED_PARAMS}
 
@@ -223,6 +240,7 @@ class OpenAINativeProvider(BaseProvider):
 
         usage_dict = result.usage.model_dump() if getattr(result, "usage", None) else {}
         usage = Usage(**usage_dict) if usage_dict else Usage()
+        self._map_cached_tokens_to_usage(usage)
 
         return ModelResponse(
             id=result.id,
@@ -264,6 +282,7 @@ class OpenAINativeProvider(BaseProvider):
 
             usage_data = data.get("usage") or None
             chunk_usage = Usage(**usage_data) if usage_data else None
+            self._map_cached_tokens_to_usage(chunk_usage)
 
             yield ModelResponse(
                 id=data["id"],
@@ -291,6 +310,11 @@ class OpenAINativeProvider(BaseProvider):
             request_id=request_id,
             model=model,
         ) from exc
+
+    def _post_chat_stream_processing(self, response, model: str):
+        for chunk in self.post_stream_processing(response, model=model):
+            self._map_cached_tokens_to_usage(chunk.usage)
+            yield chunk
 
     def completion(self, model: str, messages: list, **kwargs):
         if not model:
@@ -347,14 +371,16 @@ class OpenAINativeProvider(BaseProvider):
                     messages=messages,
                     **params,
                 )
-                return self.post_stream_processing(response, model=model)
+                return self._post_chat_stream_processing(response, model=model)
 
             response = client.chat.completions.create(
                 model=model,
                 messages=messages,
                 **params,
             )
-            return self.create_model_response(response, model=model)
+            result = self.create_model_response(response, model=model)
+            self._map_cached_tokens_to_usage(result.usage)
+            return result
         except OpenAINativeError:
             raise
         except (APIStatusError, APIConnectionError, APITimeoutError, OpenAIError) as exc:
