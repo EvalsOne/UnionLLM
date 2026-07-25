@@ -520,6 +520,16 @@ class AnthropicAIProvider(BaseProvider):
             usage=usage_obj,
         )
 
+    def _iter_stream_events(self, stream):
+        """Normalize failures raised after the streaming response is created."""
+        try:
+            yield from stream
+        except AnthropicProviderError:
+            raise
+        except Exception as e:
+            status = getattr(e, "status_code", 500)
+            raise AnthropicProviderError(status_code=status, message=str(e)) from e
+
     def post_stream_processing_wrapper(self, model: str, messages: List[dict], params: Dict[str, Any]):
         try:
             stream = self.client.messages.create(
@@ -538,7 +548,7 @@ class AnthropicAIProvider(BaseProvider):
         tool_calls = {}
         content_blocks = {}
 
-        for event in stream:
+        for event in self._iter_stream_events(stream):
             event_type = self._get(event, "type")
 
             if event_type == "message_start":

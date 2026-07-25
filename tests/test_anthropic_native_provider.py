@@ -1,7 +1,9 @@
 import json
 
+import pytest
+
 from unionllm.main import UnionLLM
-from unionllm.providers.anthropic import AnthropicAIProvider
+from unionllm.providers.anthropic import AnthropicAIProvider, AnthropicProviderError
 
 
 class Obj:
@@ -247,6 +249,32 @@ def test_streaming_maps_tool_and_text_deltas(monkeypatch):
     assert usage_chunks[0].usage.prompt_tokens == 30
     assert usage_chunks[0].usage.completion_tokens == 5
     assert chunks[-1].choices[0].finish_reason == "tool_calls"
+
+
+def test_streaming_iteration_error_uses_unified_provider_error(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+    provider.client = DummyClient()
+
+    class StreamFailure(Exception):
+        status_code = 503
+
+    def failing_stream():
+        yield Obj(type="message_start", message=Obj(id="msg_stream", usage=Obj(input_tokens=1)))
+        raise StreamFailure("upstream stream disconnected")
+
+    provider.client.messages.response = failing_stream()
+    stream = provider.completion(
+        model="claude-3-5-sonnet",
+        messages=[{"role": "user", "content": "hello"}],
+        stream=True,
+    )
+
+    with pytest.raises(AnthropicProviderError) as excinfo:
+        list(stream)
+
+    assert excinfo.value.status_code == 503
+    assert "upstream stream disconnected" in str(excinfo.value)
 
 
 def test_non_stream_completion_sends_tools_and_returns_text(monkeypatch):
