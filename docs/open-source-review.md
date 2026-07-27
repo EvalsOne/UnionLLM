@@ -8,12 +8,13 @@
 - 新增入门、provider 矩阵、架构说明和贡献指南；provider 专属环境变量、特殊路由和 Agent 平台差异集中在一个可维护位置。
 - 历史 provider 链接保留为跳转页，消除错别 provider、失效参数名等示例的继续传播。
 - 业务模型清单、价格、厂商 API 链接不再在仓库中重复维护；它们应由上游官方文档承担。
+- 已从当前版本移除根目录/测试目录的 `.DS_Store` 和 `dump.rdb`。后者曾是含任务元数据的 Redis RDB 运行文件；旧 Git 历史仍可能保留它，不能将本次删除视为历史清理。
 
 ## P0：发布与安全卫生（建议优先处理）
 
 | 发现 | 证据 | 建议行动 | 完成标准 |
 | --- | --- | --- | --- |
-| 仓库跟踪了 `.DS_Store`、`tests/.DS_Store` 和 `dump.rdb`。 | `git ls-files` 可见三者。 | 移除已跟踪的本机/Redis 运行产物，并补充 `.gitignore` 规则。 | 克隆后无本机元数据、缓存或潜在运行数据。 |
+| 历史版本曾跟踪 `.DS_Store`、`tests/.DS_Store` 和 `dump.rdb`。 | `dump.rdb` 为含任务元数据的 Redis RDB 文件。当前分支已删除它们，且 `.gitignore` 已覆盖。 | 若公开历史含敏感数据，执行经协调的历史重写与缓存清理。 | 克隆当前分支无本机元数据、缓存或潜在运行数据；公开历史的敏感 blob 已按流程处置。 |
 | 依赖完全未锁定且 `pyproject.toml` 的 Python 版本为 `*`。 | 两份依赖声明均使用通配版本。 | 设定支持的 Python 范围、核心依赖下限，并生成锁文件或明确 constraints 策略。 | 干净环境可重复安装，支持矩阵写入 CI。 |
 | 没有已跟踪的 CI、发布或安全披露配置。 | 根目录没有 GitHub Actions、`SECURITY.md`、贡献/发布流程。 | 添加 CI、`SECURITY.md`、发布检查清单和 PyPI trusted publishing 方案。 | PR 自动跑测试；安全报告与发布责任人明确。 |
 
