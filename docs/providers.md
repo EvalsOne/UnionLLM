@@ -20,8 +20,8 @@
 | `doubao` | `ARK_API_KEY` | `api_base` | 模型值通常是方舟推理接入点 ID。 |
 | `deepseek` | `DEEPSEEK_API_KEY` | `api_base`；`thinking` / `reasoning_effort` | 默认会在 `extra_body` 中处理 thinking 配置。 |
 | `gemini` | `GEMINI_API_KEY` | `enable_context_cache`、`context_cache_min_tokens`、`context_cache_ttl_seconds` | 使用 `google-genai`；支持工具结果与可选显式上下文缓存。 |
-| `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` 或 `OPENAI_API_BASE`；调用级 `base_url` / `api_base` | 使用原生 OpenAI SDK，不再经 LiteLLM。会规范化 base URL 到 `/v1`。 |
-| `anthropic` | `ANTHROPIC_API_KEY`、可选 `ANTHROPIC_BASE_URL`、`ANTHROPIC_VERSION`、`ANTHROPIC_BETA` | `use_litellm_anthropic=True` 或 `UNIONLLM_USE_LITELLM_ANTHROPIC=1` 可改走 LiteLLM | 默认使用 Anthropic Messages API；缺少 `max_tokens` 时默认 16384。 |
+| `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` 或 `OPENAI_API_BASE`；调用级 `base_url` / `api_base` | 使用原生 OpenAI SDK，不再经 LiteLLM。默认使用 Chat Completions；GPT-5.6 搭配 function tools 时会将 Chat 的 `reasoning_effort` 设为 `none`。显式传 `api_mode="responses"` 可改走 Responses API，并保留 reasoning。 |
+| `anthropic` | `ANTHROPIC_API_KEY`、可选 `ANTHROPIC_BASE_URL`、`ANTHROPIC_VERSION`、`ANTHROPIC_BETA` | `use_litellm_anthropic=True` 或 `UNIONLLM_USE_LITELLM_ANTHROPIC=1` 可改走 LiteLLM | 默认使用 Anthropic Messages API；缺少 `max_tokens` 时默认 16384。Claude 5 会将 `reasoning_effort` 映射为 Adaptive Thinking 的 `thinking.type=adaptive` 与 `output_config.effort`。 |
 | `azure` | Claude 原生分支使用 `AZURE_ANTHROPIC_API_BASE` 或 `AZURE_ANTHROPIC_ENDPOINT` | 也可传 `api_base` / `endpoint`；仅当模型名以 `claude` 开头走原生分支 | 非 Claude Azure 模型交给 LiteLLM；Claude 原生分支依赖 `anthropic` 与 `azure-identity`。当前实现只提供非流式 Claude 调用。 |
 
 ### Agent 应用 provider
@@ -50,6 +50,29 @@ response = unionchat(
 ```
 
 使用特定 provider 前，先确认上游账户已启用对应模型/应用，并用厂商官方模型名替换示例值。
+
+### OpenAI GPT-5.6 reasoning 与 function tools
+
+`api_mode` 是 OpenAI 原生路由的切换开关，可作为实例默认值，也可在单次调用中覆盖：
+
+```python
+from unionllm import UnionLLM
+
+# 默认值：保留 Chat Completions。
+# GPT-5.6 同时使用 function tools 时，reasoning_effort 会被设为 "none"。
+client = UnionLLM(provider="openai", api_mode="chat")
+
+# 需要同时保留 reasoning 与 function tools 时，显式切换到 Responses API。
+response = client.completion(
+    model="gpt-5.6-luna",
+    messages=messages,
+    tools=tools,
+    reasoning_effort="high",
+    api_mode="responses",
+)
+```
+
+省略 `api_mode` 时仍默认使用 Chat Completions，不会因为模型名称自动切换 API。
 
 ## LiteLLM allow-list 和行为
 

@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -20,10 +21,23 @@ class AnthropicProviderError(Exception):
 class AnthropicAIProvider(BaseProvider):
     DEFAULT_BASE_URL = "https://api.anthropic.com"
     DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
+    CLAUDE_5_MODEL_PATTERN = re.compile(
+        r"claude-(?:opus|sonnet|fable|mythos)-5(?:$|[-_.:])",
+        re.IGNORECASE,
+    )
+    ADAPTIVE_EFFORT_MAP = {
+        "minimal": "low",
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh",
+        "max": "max",
+    }
     # Anthropic requires max_tokens.  ConsoleX normally omits it for a regular
     # chat turn, so 1024 here silently cut otherwise normal answers short.
     # Keep the provider fallback aligned with ConsoleX's general chat default.
     DEFAULT_MAX_TOKENS = 16384
+
     def __init__(self, **kwargs):
         try:
             from anthropic import Anthropic
@@ -67,7 +81,12 @@ class AnthropicAIProvider(BaseProvider):
             default_headers=default_headers if default_headers else None,
         )
 
-    def _preprocess(self, **kwargs) -> Dict[str, Any]:
+    @classmethod
+    def _uses_adaptive_thinking(cls, model: Optional[str]) -> bool:
+        """Return whether the model belongs to the Claude 5 family."""
+        return bool(model and cls.CLAUDE_5_MODEL_PATTERN.search(str(model)))
+
+    def _preprocess(self, model: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         supported = {
             "max_tokens",
             "max_completion_tokens",
@@ -80,6 +99,7 @@ class AnthropicAIProvider(BaseProvider):
             "tool_choice",
             "thinking",
             "reasoning_effort",
+            "output_config",
             "extra_headers",
             "extra_query",
             "extra_body",
@@ -103,7 +123,49 @@ class AnthropicAIProvider(BaseProvider):
         if not clean.get("max_tokens"):
             clean["max_tokens"] = self.DEFAULT_MAX_TOKENS
 
-        if "reasoning_effort" in kwargs and "thinking" not in clean:
+        reasoning_effort = clean.get("reasoning_effort")
+        if self._uses_adaptive_thinking(model):
+            thinking = clean.get("thinking")
+            if reasoning_effort is not None and thinking is None:
+                clean["thinking"] = {"type": "adaptive"}
+            elif isinstance(thinking, dict) and thinking.get("type") == "enabled":
+                # Claude 5 rejects the legacy manual-budget shape. Preserve
+                # display and any future compatible fields, but remove the
+                # obsolete budget when switching to adaptive thinking.
+                clean["thinking"] = {
+                    **{
+                        key: value
+                        for key, value in thinking.items()
+                        if key not in ("type", "budget_tokens")
+                    },
+                    "type": "adaptive",
+                }
+
+            if reasoning_effort is not None:
+                mapped_effort = self.ADAPTIVE_EFFORT_MAP.get(reasoning_effort)
+                if mapped_effort is None:
+                    raise AnthropicProviderError(
+                        status_code=422,
+                        message=(
+                            "Invalid Anthropic reasoning_effort. Expected one of: "
+                            "minimal, low, medium, high, xhigh, max"
+                        ),
+                    )
+                output_config = clean.get("output_config")
+                if output_config is None:
+                    output_config = {}
+                elif not isinstance(output_config, dict):
+                    raise AnthropicProviderError(
+                        status_code=422,
+                        message="Anthropic output_config must be a dictionary",
+                    )
+                else:
+                    output_config = dict(output_config)
+                # A provider-native output_config value is more specific than
+                # the OpenAI-compatible reasoning_effort alias.
+                output_config.setdefault("effort", mapped_effort)
+                clean["output_config"] = output_config
+        elif reasoning_effort is not None and "thinking" not in clean:
             # Anthropic thinking requires token budget and works best with temperature=1.
             max_tokens = int(clean.get("max_tokens", self.DEFAULT_MAX_TOKENS))
             if max_tokens <= 1024:
@@ -431,7 +493,12 @@ class AnthropicAIProvider(BaseProvider):
 
         return usage if has_usage else None
 
-    def _prepare_request(self, messages: List[dict], **kwargs) -> Tuple[List[dict], Dict[str, Any]]:
+    def _prepare_request(
+        self,
+        messages: List[dict],
+        model: Optional[str] = None,
+        **kwargs,
+    ) -> Tuple[List[dict], Dict[str, Any]]:
         try:
             system_message, anthropic_messages = self._convert_openai_to_anthropic_messages(messages)
         except AnthropicProviderError:
@@ -441,7 +508,7 @@ class AnthropicAIProvider(BaseProvider):
                 status_code=500, message=f"Failed to convert messages format: {str(e)}"
             )
 
-        params = self._preprocess(**kwargs)
+        params = self._preprocess(model=model, **kwargs)
         cache_control = kwargs.get("cache_control")
         if cache_control:
             # Anthropic's current automatic prompt-caching API receives this
@@ -720,7 +787,11 @@ class AnthropicAIProvider(BaseProvider):
                 raise AnthropicProviderError(status_code=422, message=str(check.get("reason")))
             norm_messages = check.get("messages", messages)
 
-            anthropic_messages, params = self._prepare_request(norm_messages, **kwargs)
+            anthropic_messages, params = self._prepare_request(
+                norm_messages,
+                model=model,
+                **kwargs,
+            )
             stream = kwargs.get("stream", False)
 
             if stream:

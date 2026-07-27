@@ -143,6 +143,93 @@ def test_prepare_request_uses_sensible_anthropic_max_tokens_default(monkeypatch)
     assert params["max_tokens"] == 16384
 
 
+@pytest.mark.parametrize(
+    "model",
+    [
+        "claude-opus-5",
+        "claude-sonnet-5",
+        "claude-fable-5",
+        "anthropic/claude-mythos-5-20260701",
+    ],
+)
+def test_claude_5_reasoning_effort_uses_adaptive_thinking(monkeypatch, model):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+
+    _, params = provider._prepare_request(
+        [{"role": "user", "content": "hello"}],
+        model=model,
+        reasoning_effort="medium",
+    )
+
+    assert params["thinking"] == {"type": "adaptive"}
+    assert params["output_config"] == {"effort": "medium"}
+    assert "reasoning_effort" not in params
+    assert "temperature" not in params
+
+
+def test_claude_5_converts_explicit_legacy_thinking_and_merges_output_config(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+
+    _, params = provider._prepare_request(
+        [{"role": "user", "content": "hello"}],
+        model="claude-opus-5",
+        thinking={
+            "type": "enabled",
+            "budget_tokens": 4096,
+            "display": "summarized",
+        },
+        reasoning_effort="high",
+        output_config={
+            "effort": "max",
+            "format": {"type": "json_schema", "schema": {"type": "object"}},
+        },
+    )
+
+    assert params["thinking"] == {
+        "type": "adaptive",
+        "display": "summarized",
+    }
+    assert params["output_config"] == {
+        "effort": "max",
+        "format": {"type": "json_schema", "schema": {"type": "object"}},
+    }
+
+
+def test_claude_5_maps_minimal_reasoning_effort_to_low(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+
+    _, params = provider._prepare_request(
+        [{"role": "user", "content": "hello"}],
+        model="claude-sonnet-5",
+        reasoning_effort="minimal",
+    )
+
+    assert params["thinking"] == {"type": "adaptive"}
+    assert params["output_config"] == {"effort": "low"}
+
+
+def test_legacy_claude_model_keeps_manual_thinking_budget(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+
+    _, params = provider._prepare_request(
+        [{"role": "user", "content": "hello"}],
+        model="claude-3-5-sonnet",
+        max_tokens=2048,
+        reasoning_effort="high",
+    )
+
+    assert params["thinking"] == {
+        "type": "enabled",
+        "budget_tokens": 2047,
+    }
+    assert params["temperature"] == 1
+    assert "output_config" not in params
+
+
 def test_prepare_request_removes_consolex_message_bookkeeping(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     provider = AnthropicAIProvider()
@@ -317,6 +404,30 @@ def test_non_stream_completion_sends_tools_and_returns_text(monkeypatch):
     assert sent["messages"][0]["content"] == "hello"
     assert response.choices[0].message.content == "hello world"
     assert response.choices[0].finish_reason == "stop"
+
+
+def test_non_stream_claude_5_sends_adaptive_thinking_and_effort(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    provider = AnthropicAIProvider()
+    provider.client = DummyClient()
+    provider.client.messages.response = Obj(
+        id="msg_claude_5",
+        stop_reason="end_turn",
+        content=[Obj(type="text", text="hello")],
+        usage=Obj(input_tokens=1, output_tokens=1),
+    )
+
+    provider.completion(
+        model="claude-opus-5",
+        messages=[{"role": "user", "content": "hello"}],
+        reasoning_effort="high",
+    )
+
+    sent = provider.client.messages.calls[0]
+    assert sent["thinking"] == {"type": "adaptive"}
+    assert sent["output_config"] == {"effort": "high"}
+    assert "reasoning_effort" not in sent
+    assert "temperature" not in sent
 
 
 def test_unionllm_routes_anthropic_to_native_provider(monkeypatch):

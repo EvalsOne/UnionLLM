@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import httpx
@@ -26,10 +27,11 @@ class FakeCompletionChunk:
         return self._data
 
 
-def build_mock_client(*, chat_response=None, completion_response=None):
+def build_mock_client(*, chat_response=None, completion_response=None, responses_response=None):
     client = MagicMock()
     client.chat.completions.create.return_value = chat_response
     client.completions.create.return_value = completion_response
+    client.responses.create.return_value = responses_response
     return client
 
 
@@ -109,6 +111,59 @@ def build_completion_chunk(*, text="", finish_reason=None, usage=None):
     )
 
 
+def build_responses_usage():
+    return SimpleNamespace(
+        input_tokens=8,
+        output_tokens=5,
+        total_tokens=13,
+        input_tokens_details=SimpleNamespace(
+            cached_tokens=3,
+            cache_write_tokens=2,
+        ),
+        output_tokens_details=SimpleNamespace(reasoning_tokens=4),
+    )
+
+
+def build_responses_response(*, text=None, function_call=None):
+    output = []
+    if text is not None:
+        output.append(
+            SimpleNamespace(
+                id="msg_1",
+                type="message",
+                status="completed",
+                role="assistant",
+                content=[
+                    SimpleNamespace(
+                        type="output_text",
+                        text=text,
+                        annotations=[],
+                    )
+                ],
+            )
+        )
+    if function_call is not None:
+        output.append(
+            SimpleNamespace(
+                id="fc_1",
+                type="function_call",
+                status="completed",
+                call_id="call_1",
+                name=function_call["name"],
+                arguments=function_call["arguments"],
+            )
+        )
+    return SimpleNamespace(
+        id="resp_1",
+        object="response",
+        created_at=2,
+        status="completed",
+        incomplete_details=None,
+        output=output,
+        usage=build_responses_usage(),
+    )
+
+
 def test_unionllm_routes_openai_to_native_provider(monkeypatch):
     provider_instance = MagicMock()
     provider_ctor = MagicMock(return_value=provider_instance)
@@ -153,7 +208,212 @@ def test_chat_non_stream_uses_env_key_default_base_and_forwards_openai_params(mo
     assert result.usage.cache_read_input_tokens == 1
 
 
-def test_chat_stream_maps_deltas_finish_reason_and_usage(monkeypatch):
+@pytest.mark.parametrize("reasoning_effort", [None, "low", "high"])
+def test_gpt_5_6_function_tools_default_to_chat_with_reasoning_none(
+    monkeypatch,
+    reasoning_effort,
+):
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    mock_client = build_mock_client(chat_response=build_chat_response("chat fallback"))
+    monkeypatch.setattr(
+        "unionllm.providers.openai_native.OpenAI",
+        MagicMock(return_value=mock_client),
+    )
+
+    provider = OpenAINativeProvider()
+    kwargs = {
+        "tools": [
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ]
+    }
+    if reasoning_effort is not None:
+        kwargs["reasoning_effort"] = reasoning_effort
+
+    result = provider.completion(
+        model="gpt-5.6-luna",
+        messages=[{"role": "user", "content": "Use the tool"}],
+        **kwargs,
+    )
+
+    sent = mock_client.chat.completions.create.call_args.kwargs
+    assert sent["reasoning_effort"] == "none"
+    assert not mock_client.responses.create.called
+    assert result.choices[0].message.content == "chat fallback"
+
+
+def test_explicit_responses_mode_preserves_reasoning_and_maps_function_tools(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    responses_response = build_responses_response(
+        function_call={"name": "lookup", "arguments": '{"query":"weather"}'}
+    )
+    mock_client = build_mock_client(responses_response=responses_response)
+    monkeypatch.setattr(
+        "unionllm.providers.openai_native.OpenAI",
+        MagicMock(return_value=mock_client),
+    )
+
+    provider = OpenAINativeProvider()
+    result = provider.completion(
+        model="gpt-5.6-luna",
+        messages=[
+            {"role": "system", "content": "Use tools when needed."},
+            {"role": "user", "content": "What is the weather?"},
+        ],
+        api_mode="responses",
+        reasoning_effort="high",
+        max_completion_tokens=4096,
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "description": "Look up information",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {"query": {"type": "string"}},
+                    },
+                },
+            }
+        ],
+        tool_choice={
+            "type": "function",
+            "function": {"name": "lookup"},
+        },
+    )
+
+    sent = mock_client.responses.create.call_args.kwargs
+    assert sent["model"] == "gpt-5.6-luna"
+    assert sent["input"] == [
+        {"role": "system", "content": "Use tools when needed."},
+        {"role": "user", "content": "What is the weather?"},
+    ]
+    assert sent["reasoning"] == {"effort": "high"}
+    assert sent["max_output_tokens"] == 4096
+    assert sent["tools"] == [
+        {
+            "type": "function",
+            "name": "lookup",
+            "description": "Look up information",
+            "parameters": {
+                "type": "object",
+                "properties": {"query": {"type": "string"}},
+            },
+            "strict": False,
+        }
+    ]
+    assert sent["tool_choice"] == {"type": "function", "name": "lookup"}
+    assert not mock_client.chat.completions.create.called
+    assert result.choices[0].finish_reason == "tool_calls"
+    assert result.choices[0].message.tool_calls[0].id == "call_1"
+    assert result.choices[0].message.tool_calls[0].function.name == "lookup"
+    assert result.usage.prompt_tokens == 8
+    assert result.usage.completion_tokens == 5
+    assert result.usage.cache_read_input_tokens == 3
+    assert result.usage.cache_creation_input_tokens == 2
+
+
+def test_provider_level_responses_mode_is_default_and_call_can_override(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    mock_client = build_mock_client(
+        chat_response=build_chat_response("chat"),
+        responses_response=build_responses_response(text="responses"),
+    )
+    monkeypatch.setattr(
+        "unionllm.providers.openai_native.OpenAI",
+        MagicMock(return_value=mock_client),
+    )
+
+    provider = OpenAINativeProvider(api_mode="responses")
+    responses_result = provider.completion(
+        model="gpt-5.6-luna",
+        messages=[{"role": "user", "content": "Hi"}],
+    )
+    chat_result = provider.completion(
+        model="gpt-5.6-luna",
+        messages=[{"role": "user", "content": "Hi again"}],
+        api_mode="chat",
+    )
+
+    assert mock_client.responses.create.call_count == 1
+    assert mock_client.chat.completions.create.call_count == 1
+    assert responses_result.choices[0].message.content == "responses"
+    assert chat_result.choices[0].message.content == "chat"
+
+
+def test_responses_mode_converts_tool_call_history_and_tool_outputs(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    mock_client = build_mock_client(
+        responses_response=build_responses_response(text="It is sunny.")
+    )
+    monkeypatch.setattr(
+        "unionllm.providers.openai_native.OpenAI",
+        MagicMock(return_value=mock_client),
+    )
+
+    provider = OpenAINativeProvider()
+    result = provider.completion(
+        model="gpt-5.6-luna",
+        api_mode="responses",
+        messages=[
+            {"role": "user", "content": "What is the weather?"},
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "lookup",
+                            "arguments": '{"query":"weather"}',
+                        },
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call_1",
+                "content": {"condition": "sunny"},
+            },
+        ],
+        reasoning_effort="medium",
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "lookup",
+                    "parameters": {"type": "object"},
+                },
+            }
+        ],
+    )
+
+    sent_input = mock_client.responses.create.call_args.kwargs["input"]
+    assert sent_input == [
+        {"role": "user", "content": "What is the weather?"},
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "lookup",
+            "arguments": '{"query":"weather"}',
+        },
+        {
+            "type": "function_call_output",
+            "call_id": "call_1",
+            "output": '{"condition": "sunny"}',
+        },
+    ]
+    assert result.choices[0].message.content == "It is sunny."
+    assert result.choices[0].finish_reason == "stop"
+
+
+def test_chat_stream_maps_deltas_and_normalizes_usage_only_chunk(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "env-key")
     usage = CompletionUsage(
         prompt_tokens=2,
@@ -192,6 +452,67 @@ def test_chat_stream_maps_deltas_finish_reason_and_usage(monkeypatch):
     assert chunks[2].choices[0].finish_reason == "stop"
     assert chunks[3].usage.total_tokens == 5
     assert chunks[3].usage.cache_read_input_tokens == 1
+    assert chunks[3].choices[0].delta.content == ""
+
+
+def test_responses_stream_maps_text_finish_reason_and_usage(monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+    completed = build_responses_response(text="hello")
+    response_events = iter(
+        [
+            SimpleNamespace(
+                type="response.created",
+                response=SimpleNamespace(id="resp_1", created_at=2),
+            ),
+            SimpleNamespace(
+                type="response.output_text.delta",
+                delta="hel",
+            ),
+            SimpleNamespace(
+                type="response.output_text.delta",
+                delta="lo",
+            ),
+            SimpleNamespace(
+                type="response.completed",
+                response=completed,
+            ),
+        ]
+    )
+    mock_client = build_mock_client(responses_response=response_events)
+    monkeypatch.setattr(
+        "unionllm.providers.openai_native.OpenAI",
+        MagicMock(return_value=mock_client),
+    )
+
+    provider = OpenAINativeProvider()
+    chunks = list(
+        provider.completion(
+            model="gpt-5.6-luna",
+            api_mode="responses",
+            messages=[{"role": "user", "content": "Hi"}],
+            stream=True,
+            reasoning_effort="low",
+            tools=[
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "lookup",
+                        "parameters": {"type": "object"},
+                    },
+                }
+            ],
+        )
+    )
+
+    sent = mock_client.responses.create.call_args.kwargs
+    assert sent["stream"] is True
+    assert "stream_options" not in sent
+    assert chunks[0].choices[0].delta.role == "assistant"
+    assert chunks[0].choices[0].delta.content == "hel"
+    assert chunks[1].choices[0].delta.content == "lo"
+    assert chunks[2].choices[0].finish_reason == "stop"
+    assert chunks[2].usage.total_tokens == 13
+    assert chunks[2].usage.cache_read_input_tokens == 3
 
 
 def test_call_time_api_key_and_base_url_override_default_client(monkeypatch):

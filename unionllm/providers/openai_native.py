@@ -1,9 +1,20 @@
+import json
 import os
+import re
 from urllib.parse import urlparse, urlunparse
 
 from openai import APIConnectionError, APIStatusError, APITimeoutError, OpenAI, OpenAIError
 
-from unionllm.utils import Choices, Delta, Message, ModelResponse, StreamingChoices, Usage
+from unionllm.utils import (
+    ChatCompletionMessageToolCall,
+    Choices,
+    Delta,
+    Function,
+    Message,
+    ModelResponse,
+    StreamingChoices,
+    Usage,
+)
 
 from .base_provider import BaseProvider
 
@@ -22,6 +33,7 @@ class OpenAINativeError(Exception):
 class OpenAINativeProvider(BaseProvider):
     DEFAULT_BASE_URL = "https://api.openai.com"
     COMPLETION_MODELS = {"gpt-3.5-turbo-instruct", "davinci-002", "babbage-002"}
+    GPT_5_6_MODEL_PATTERN = re.compile(r"(?:^|/)gpt-5\.6(?:$|[-.])", re.IGNORECASE)
     CHAT_SUPPORTED_PARAMS = {
         "audio",
         "extra_body",
@@ -82,6 +94,50 @@ class OpenAINativeProvider(BaseProvider):
         "top_p",
         "user",
     }
+    RESPONSES_SUPPORTED_PARAMS = {
+        "background",
+        "conversation",
+        "extra_body",
+        "extra_headers",
+        "extra_query",
+        "include",
+        "instructions",
+        "max_output_tokens",
+        "max_tool_calls",
+        "metadata",
+        "parallel_tool_calls",
+        "previous_response_id",
+        "prompt",
+        "prompt_cache_key",
+        "reasoning",
+        "safety_identifier",
+        "service_tier",
+        "store",
+        "stream",
+        "stream_options",
+        "temperature",
+        "text",
+        "timeout",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p",
+        "truncation",
+        "user",
+    }
+    RESPONSES_UNSUPPORTED_CHAT_PARAMS = {
+        "audio",
+        "frequency_penalty",
+        "logit_bias",
+        "logprobs",
+        "modalities",
+        "n",
+        "prediction",
+        "presence_penalty",
+        "seed",
+        "stop",
+        "web_search_options",
+    }
 
     def __init__(self, **model_kwargs):
         self.api_key = model_kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
@@ -96,6 +152,7 @@ class OpenAINativeProvider(BaseProvider):
             or self.DEFAULT_BASE_URL
         )
         self.base_url = self._normalize_base_url(raw_base_url)
+        self.api_mode = model_kwargs.get("api_mode")
         self.client = self._build_client(self.api_key, self.base_url)
 
     def _build_client(self, api_key: str, base_url: str) -> OpenAI:
@@ -128,11 +185,20 @@ class OpenAINativeProvider(BaseProvider):
         return self._build_client(api_key, base_url)
 
     def _resolve_api_mode(self, model: str, **kwargs) -> str:
-        requested_mode = kwargs.get("api_mode") or kwargs.get("api_type") or kwargs.get("endpoint")
+        requested_mode = (
+            kwargs.get("api_mode")
+            or self.api_mode
+            or kwargs.get("api_type")
+            or kwargs.get("endpoint")
+        )
         if requested_mode:
             normalized = str(requested_mode).strip().lower().replace("-", "_")
             if normalized in {"completion", "completions", "text_completion", "text_completions"}:
                 return "completions"
+            if normalized in {"response", "responses", "responses_api"} or normalized.rstrip(
+                "/"
+            ).endswith("/responses"):
+                return "responses"
             return "chat"
 
         if kwargs.get("prompt") is not None:
@@ -175,6 +241,145 @@ class OpenAINativeProvider(BaseProvider):
 
     def _preprocess_completion_params(self, **kwargs) -> dict:
         return {key: value for key, value in kwargs.items() if key in self.COMPLETIONS_SUPPORTED_PARAMS}
+
+    @classmethod
+    def _is_gpt_5_6_model(cls, model: str) -> bool:
+        return bool(model and cls.GPT_5_6_MODEL_PATTERN.search(str(model)))
+
+    @staticmethod
+    def _has_function_tools(params: dict) -> bool:
+        if params.get("functions"):
+            return True
+        return any(
+            isinstance(tool, dict) and tool.get("type") == "function"
+            for tool in (params.get("tools") or [])
+        )
+
+    def _ensure_chat_tool_reasoning_compatibility(self, model: str, params: dict) -> dict:
+        if not self._is_gpt_5_6_model(model) or not self._has_function_tools(params):
+            return params
+
+        # GPT-5.6 Chat Completions only supports function tools when the
+        # effective reasoning effort is none. Responses remains available via
+        # api_mode="responses" for callers that need both reasoning and tools.
+        params["reasoning_effort"] = "none"
+        return params
+
+    @staticmethod
+    def _convert_response_format(response_format):
+        if not isinstance(response_format, dict):
+            return response_format
+        if response_format.get("type") != "json_schema":
+            return dict(response_format)
+
+        json_schema = response_format.get("json_schema")
+        if not isinstance(json_schema, dict):
+            return dict(response_format)
+        return {"type": "json_schema", **json_schema}
+
+    @staticmethod
+    def _convert_tools_to_responses(tools, functions=None):
+        converted = []
+        for tool in tools or []:
+            if not isinstance(tool, dict) or tool.get("type") != "function":
+                converted.append(tool)
+                continue
+
+            function = tool.get("function") or {}
+            converted_tool = {
+                "type": "function",
+                "name": function.get("name"),
+                "parameters": function.get("parameters") or {},
+                # Chat Completions functions are non-strict by default.
+                "strict": function.get("strict", False),
+            }
+            if function.get("description") is not None:
+                converted_tool["description"] = function["description"]
+            converted.append(converted_tool)
+
+        for function in functions or []:
+            if not isinstance(function, dict):
+                continue
+            converted_tool = {
+                "type": "function",
+                "name": function.get("name"),
+                "parameters": function.get("parameters") or {},
+                "strict": function.get("strict", False),
+            }
+            if function.get("description") is not None:
+                converted_tool["description"] = function["description"]
+            converted.append(converted_tool)
+        return converted
+
+    @staticmethod
+    def _convert_tool_choice_to_responses(tool_choice, function_call=None):
+        if tool_choice is None and function_call is not None:
+            tool_choice = function_call
+        if not isinstance(tool_choice, dict):
+            return tool_choice
+
+        function = tool_choice.get("function")
+        if isinstance(function, dict) and function.get("name"):
+            return {"type": "function", "name": function["name"]}
+        if tool_choice.get("name"):
+            return {"type": "function", "name": tool_choice["name"]}
+        return tool_choice
+
+    def _preprocess_responses_params(self, **kwargs) -> dict:
+        unsupported = sorted(
+            key
+            for key in self.RESPONSES_UNSUPPORTED_CHAT_PARAMS
+            if kwargs.get(key) is not None
+        )
+        if unsupported:
+            raise OpenAINativeError(
+                status_code=422,
+                message=(
+                    "Responses API does not support these Chat Completions parameters: "
+                    + ", ".join(unsupported)
+                ),
+            )
+
+        params = {
+            key: value
+            for key, value in kwargs.items()
+            if key in self.RESPONSES_SUPPORTED_PARAMS
+        }
+
+        if "max_output_tokens" not in params:
+            max_output_tokens = kwargs.get("max_completion_tokens")
+            if max_output_tokens is None:
+                max_output_tokens = kwargs.get("max_tokens")
+            if max_output_tokens is not None:
+                params["max_output_tokens"] = max_output_tokens
+
+        reasoning_effort = kwargs.get("reasoning_effort")
+        if reasoning_effort is not None and "reasoning" not in params:
+            params["reasoning"] = {"effort": reasoning_effort}
+
+        text = dict(params.get("text") or {})
+        if kwargs.get("response_format") is not None and "format" not in text:
+            text["format"] = self._convert_response_format(kwargs["response_format"])
+        if kwargs.get("verbosity") is not None and "verbosity" not in text:
+            text["verbosity"] = kwargs["verbosity"]
+        if text:
+            params["text"] = text
+
+        tools = self._convert_tools_to_responses(
+            kwargs.get("tools"),
+            functions=kwargs.get("functions"),
+        )
+        if tools:
+            params["tools"] = tools
+
+        tool_choice = self._convert_tool_choice_to_responses(
+            kwargs.get("tool_choice"),
+            function_call=kwargs.get("function_call"),
+        )
+        if tool_choice is not None:
+            params["tool_choice"] = tool_choice
+
+        return params
 
     def _normalize_messages(self, model: str, messages: list) -> list:
         check = self.check_prompt("openai", model, messages)
@@ -225,6 +430,316 @@ class OpenAINativeProvider(BaseProvider):
             prompt_parts.append(f"{label}: {content}")
 
         return "\n\n".join(prompt_parts)
+
+    @staticmethod
+    def _stringify_tool_output(content):
+        if isinstance(content, str):
+            return content
+        if content is None:
+            return ""
+        return json.dumps(content, ensure_ascii=False)
+
+    @staticmethod
+    def _convert_content_to_responses(content, role: str):
+        if not isinstance(content, list):
+            return content
+
+        converted = []
+        for part in content:
+            if not isinstance(part, dict):
+                converted.append(part)
+                continue
+
+            part_type = part.get("type")
+            if part_type == "text":
+                converted.append(
+                    {
+                        "type": "input_text",
+                        "text": part.get("text", ""),
+                    }
+                )
+            elif part_type == "image_url":
+                image_url = part.get("image_url")
+                if isinstance(image_url, dict):
+                    converted_part = {
+                        "type": "input_image",
+                        "image_url": image_url.get("url"),
+                    }
+                    if image_url.get("detail") is not None:
+                        converted_part["detail"] = image_url["detail"]
+                    converted.append(converted_part)
+                else:
+                    converted.append({"type": "input_image", "image_url": image_url})
+            else:
+                converted.append(dict(part))
+        return converted
+
+    def _messages_to_responses_input(self, messages: list, model: str) -> list:
+        items = []
+        for raw_message in messages or []:
+            message = self.convert_object_to_dict(raw_message)
+            role = message.get("role")
+
+            if role == "tool":
+                call_id = message.get("tool_call_id")
+                if not call_id:
+                    raise OpenAINativeError(
+                        status_code=422,
+                        message="Responses API tool messages require tool_call_id",
+                        model=model,
+                    )
+                items.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": self._stringify_tool_output(message.get("content")),
+                    }
+                )
+                continue
+
+            content = message.get("content")
+            if content not in (None, "", []):
+                items.append(
+                    {
+                        "role": role,
+                        "content": self._convert_content_to_responses(content, role),
+                    }
+                )
+
+            if role == "assistant":
+                for tool_call in message.get("tool_calls") or []:
+                    function = tool_call.get("function") or {}
+                    arguments = function.get("arguments", "")
+                    if not isinstance(arguments, str):
+                        arguments = json.dumps(arguments, ensure_ascii=False)
+                    items.append(
+                        {
+                            "type": "function_call",
+                            "call_id": tool_call.get("id"),
+                            "name": function.get("name"),
+                            "arguments": arguments,
+                        }
+                    )
+
+        return items
+
+    @staticmethod
+    def _get_response_value(payload, key, default=None):
+        if isinstance(payload, dict):
+            return payload.get(key, default)
+        return getattr(payload, key, default)
+
+    def _create_responses_usage(self, usage_payload):
+        if usage_payload is None:
+            return Usage()
+        usage_data = self.convert_object_to_dict(usage_payload)
+        input_details = usage_data.get("input_tokens_details") or {}
+        output_details = usage_data.get("output_tokens_details") or {}
+        usage = Usage(
+            prompt_tokens=usage_data.get("input_tokens"),
+            completion_tokens=usage_data.get("output_tokens"),
+            total_tokens=usage_data.get("total_tokens"),
+            prompt_tokens_details=input_details,
+            completion_tokens_details=output_details,
+        )
+        cached_tokens = input_details.get("cached_tokens")
+        if cached_tokens is not None:
+            usage.cache_read_input_tokens = cached_tokens
+        cache_write_tokens = input_details.get("cache_write_tokens")
+        if cache_write_tokens is not None:
+            usage.cache_creation_input_tokens = cache_write_tokens
+        return usage
+
+    def _responses_finish_reason(self, response, has_tool_calls: bool) -> str:
+        if has_tool_calls:
+            return "tool_calls"
+        if self._get_response_value(response, "status") != "incomplete":
+            return "stop"
+
+        details = self._get_response_value(response, "incomplete_details")
+        reason = self._get_response_value(details, "reason")
+        if reason == "max_output_tokens":
+            return "length"
+        return reason or "stop"
+
+    def _create_responses_model_response(self, response, model: str) -> ModelResponse:
+        text_parts = []
+        tool_calls = []
+        annotations = []
+
+        for item in self._get_response_value(response, "output", []) or []:
+            item_type = self._get_response_value(item, "type")
+            if item_type == "message":
+                for part in self._get_response_value(item, "content", []) or []:
+                    part_type = self._get_response_value(part, "type")
+                    if part_type == "output_text":
+                        text_parts.append(self._get_response_value(part, "text", ""))
+                        annotations.extend(
+                            self._get_response_value(part, "annotations", []) or []
+                        )
+                    elif part_type == "refusal":
+                        text_parts.append(self._get_response_value(part, "refusal", ""))
+            elif item_type == "function_call":
+                function = Function(
+                    name=self._get_response_value(item, "name"),
+                    arguments=self._get_response_value(item, "arguments", ""),
+                )
+                tool_calls.append(
+                    ChatCompletionMessageToolCall(
+                        id=self._get_response_value(item, "call_id")
+                        or self._get_response_value(item, "id"),
+                        type="function",
+                        function=function,
+                    )
+                )
+
+        message = Message(
+            content="".join(text_parts) if text_parts else None,
+            role="assistant",
+            tool_calls=tool_calls or None,
+        )
+        if annotations:
+            message.annotations = self.convert_object_to_dict(annotations)
+
+        return ModelResponse(
+            id=self._get_response_value(response, "id"),
+            choices=[
+                Choices(
+                    index=0,
+                    finish_reason=self._responses_finish_reason(
+                        response,
+                        has_tool_calls=bool(tool_calls),
+                    ),
+                    message=message,
+                )
+            ],
+            created=self._get_response_value(response, "created_at"),
+            model=model,
+            usage=self._create_responses_usage(
+                self._get_response_value(response, "usage")
+            ),
+            object="chat.completion",
+        )
+
+    def _post_responses_stream_processing(self, response, model: str):
+        response_id = None
+        created_at = None
+        role_emitted = False
+
+        for event in response:
+            event_type = self._get_response_value(event, "type")
+
+            if event_type == "response.created":
+                created_response = self._get_response_value(event, "response")
+                response_id = self._get_response_value(created_response, "id")
+                created_at = self._get_response_value(created_response, "created_at")
+                continue
+
+            if event_type == "response.output_text.delta":
+                delta = Delta(
+                    content=self._get_response_value(event, "delta", ""),
+                    role=None if role_emitted else "assistant",
+                )
+                role_emitted = True
+                yield ModelResponse(
+                    id=response_id,
+                    choices=[StreamingChoices(index=0, delta=delta)],
+                    created=created_at,
+                    model=model,
+                    usage=None,
+                    stream=True,
+                )
+                continue
+
+            if event_type == "response.output_item.added":
+                item = self._get_response_value(event, "item")
+                if self._get_response_value(item, "type") != "function_call":
+                    continue
+                index = self._get_response_value(event, "output_index", 0)
+                delta = Delta(role=None if role_emitted else "assistant")
+                role_emitted = True
+                delta.tool_calls = [
+                    {
+                        "index": index,
+                        "id": self._get_response_value(item, "call_id")
+                        or self._get_response_value(item, "id"),
+                        "type": "function",
+                        "function": {
+                            "name": self._get_response_value(item, "name"),
+                            "arguments": self._get_response_value(item, "arguments", ""),
+                        },
+                    }
+                ]
+                yield ModelResponse(
+                    id=response_id,
+                    choices=[StreamingChoices(index=0, delta=delta)],
+                    created=created_at,
+                    model=model,
+                    usage=None,
+                    stream=True,
+                )
+                continue
+
+            if event_type == "response.function_call_arguments.delta":
+                index = self._get_response_value(event, "output_index", 0)
+                delta = Delta()
+                delta.tool_calls = [
+                    {
+                        "index": index,
+                        "function": {
+                            "arguments": self._get_response_value(event, "delta", ""),
+                        },
+                    }
+                ]
+                yield ModelResponse(
+                    id=response_id,
+                    choices=[StreamingChoices(index=0, delta=delta)],
+                    created=created_at,
+                    model=model,
+                    usage=None,
+                    stream=True,
+                )
+                continue
+
+            if event_type == "response.completed":
+                completed = self._get_response_value(event, "response")
+                response_id = self._get_response_value(completed, "id", response_id)
+                created_at = self._get_response_value(completed, "created_at", created_at)
+                has_tool_calls = any(
+                    self._get_response_value(item, "type") == "function_call"
+                    for item in self._get_response_value(completed, "output", []) or []
+                )
+                yield ModelResponse(
+                    id=response_id,
+                    choices=[
+                        StreamingChoices(
+                            index=0,
+                            finish_reason=self._responses_finish_reason(
+                                completed,
+                                has_tool_calls=has_tool_calls,
+                            ),
+                            delta=Delta(),
+                        )
+                    ],
+                    created=created_at,
+                    model=model,
+                    usage=self._create_responses_usage(
+                        self._get_response_value(completed, "usage")
+                    ),
+                    stream=True,
+                )
+                continue
+
+            if event_type in {"response.failed", "error"}:
+                response = self._get_response_value(event, "response")
+                error = self._get_response_value(event, "error") or (
+                    self._get_response_value(response, "error") if response else None
+                )
+                raise OpenAINativeError(
+                    status_code=500,
+                    message=self._get_response_value(error, "message", str(error)),
+                    model=model,
+                )
 
     def _create_completion_response(self, result, model: str) -> ModelResponse:
         choices = []
@@ -314,6 +829,16 @@ class OpenAINativeProvider(BaseProvider):
     def _post_chat_stream_processing(self, response, model: str):
         for chunk in self.post_stream_processing(response, model=model):
             self._map_cached_tokens_to_usage(chunk.usage)
+            # OpenAI sends a final usage-only chunk with choices=[] when
+            # stream_options.include_usage is enabled. UnionLLM's streaming
+            # contract keeps choices[0] safe for existing consumers.
+            if not chunk.choices and chunk.usage is not None:
+                chunk.choices = [
+                    StreamingChoices(
+                        index=0,
+                        delta=Delta(content=""),
+                    )
+                ]
             yield chunk
 
     def completion(self, model: str, messages: list, **kwargs):
@@ -362,7 +887,22 @@ class OpenAINativeProvider(BaseProvider):
                 )
 
             messages = self._normalize_messages(model, messages)
+
+            if api_mode == "responses":
+                params = self._preprocess_responses_params(**kwargs)
+                response_input = self._messages_to_responses_input(messages, model=model)
+                stream = bool(params.get("stream", False))
+                response = client.responses.create(
+                    model=model,
+                    input=response_input,
+                    **params,
+                )
+                if stream:
+                    return self._post_responses_stream_processing(response, model=model)
+                return self._create_responses_model_response(response, model=model)
+
             params = self._preprocess_chat_params(**kwargs)
+            params = self._ensure_chat_tool_reasoning_compatibility(model, params)
             stream = bool(params.get("stream", False))
             if stream:
                 params = self._include_stream_usage(params)
