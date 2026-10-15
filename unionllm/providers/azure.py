@@ -101,6 +101,9 @@ class AzureAnthropicProvider(BaseProvider):
             "tool_choice",
             "thinking",
             "reasoning_effort",
+            # Top-level automatic prompt caching, as in AnthropicAIProvider; the
+            # Foundry endpoint accepts it (verified 2026-10-10: second call read the prefix).
+            "cache_control",
             # stream intentionally not passed (non-stream implementation here)
         }
         clean = {k: v for k, v in kwargs.items() if k in supported}
@@ -161,24 +164,24 @@ class AzureAnthropicProvider(BaseProvider):
                 - system_message: str or None - the system message content
                 - converted_messages: list - non-system messages in Anthropic format
         """
-        system_message = None
-        system_message = None
+        system_parts: List[str] = []
         converted_messages = []
         
         for message in messages:
-            # Handle system role: Anthropic doesn't support system role in messages array
-            # Extract it and return as separate parameter
+            # Handle system role: Anthropic doesn't support system role in messages array.
+            # Every system message is kept (callers send more than one, e.g. instructions
+            # plus a memory block), joined into the single system parameter.
             if message.get("role") == "system":
                 content = message.get("content", "")
                 if isinstance(content, str):
-                    system_message = content
+                    system_parts.append(content)
                 elif isinstance(content, list):
                     # Extract text from content blocks
                     text_parts = []
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "text":
                             text_parts.append(block.get("text", ""))
-                    system_message = "\n".join(text_parts)
+                    system_parts.append("\n".join(text_parts))
                 continue
             
             # Handle tool role conversion: OpenAI's role="tool" -> Anthropic's role="user" with tool_result
@@ -298,6 +301,7 @@ class AzureAnthropicProvider(BaseProvider):
             
             converted_messages.append(converted_msg)
         
+        system_message = "\n\n".join(part for part in system_parts if part and part.strip()) or None
         return system_message, converted_messages
 
     def _convert_image_url_to_anthropic(self, image_block: dict) -> dict:
@@ -632,8 +636,13 @@ class AzureAnthropicProvider(BaseProvider):
         try:
             usage = getattr(foundry_resp, "usage", None)
             if usage:
-                prompt_tokens = getattr(usage, "input_tokens", None) or usage.get("input_tokens") if isinstance(usage, dict) else None
-                completion_tokens = getattr(usage, "output_tokens", None) or usage.get("output_tokens") if isinstance(usage, dict) else None
+                def read(key):
+                    return usage.get(key) if isinstance(usage, dict) else getattr(usage, key, None)
+
+                # Same contract as the stream path and AnthropicAIProvider: prompt_tokens
+                # excludes cached tokens, which are reported in their own two fields.
+                prompt_tokens = read("input_tokens")
+                completion_tokens = read("output_tokens")
                 total_tokens = None
                 if prompt_tokens is not None and completion_tokens is not None:
                     total_tokens = prompt_tokens + completion_tokens
@@ -642,6 +651,8 @@ class AzureAnthropicProvider(BaseProvider):
                     completion_tokens=completion_tokens,
                     total_tokens=total_tokens,
                 )
+                usage_obj.cache_creation_input_tokens = read("cache_creation_input_tokens")
+                usage_obj.cache_read_input_tokens = read("cache_read_input_tokens")
         except Exception:
             usage_obj = None
 
@@ -894,31 +905,34 @@ class AzureAnthropicProvider(BaseProvider):
         check = self.check_prompt("anthropic", model, messages)
         if not check.get("pass_check"):
             raise AzureProviderError(status_code=422, message=str(check.get("reason")))
-        norm_messages = check.get("messages", messages)
-
-        # Convert OpenAI-style messages to Anthropic-style messages and extract system message
-        # This handles image_url -> image, video_url -> video, system -> system parameter, etc.
-        try:
-            system_message, norm_messages = self._convert_openai_to_anthropic_messages(norm_messages)
-        except AzureProviderError:
-            raise
-        except Exception as e:
-            raise AzureProviderError(
-                status_code=500,
-                message=f"Failed to convert messages format: {str(e)}"
-            )
+        checked_messages = check.get("messages", messages)
 
         stream = kwargs.get("stream", False)
 
         if stream:
+            # The stream wrapper does its own conversion. It must get the messages
+            # before conversion: converted ones have no system message left, so the
+            # system prompt used to be dropped from every streamed request.
             try:
-                return self.post_stream_processing_wrapper(model, norm_messages, **kwargs)
+                return self.post_stream_processing_wrapper(model, checked_messages, **kwargs)
             except AzureProviderError:
                 raise
             except Exception as e:
                 status = getattr(e, "status_code", 500)
                 raise AzureProviderError(status_code=status, message=str(e))
         else:
+            # Convert OpenAI-style messages to Anthropic-style messages and extract system message
+            # This handles image_url -> image, video_url -> video, system -> system parameter, etc.
+            try:
+                system_message, norm_messages = self._convert_openai_to_anthropic_messages(checked_messages)
+            except AzureProviderError:
+                raise
+            except Exception as e:
+                raise AzureProviderError(
+                    status_code=500,
+                    message=f"Failed to convert messages format: {str(e)}"
+                )
+
             params = self._preprocess(**kwargs)
             
             # Add system parameter if system message exists
