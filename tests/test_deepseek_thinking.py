@@ -40,3 +40,13 @@ class TestDeepSeekThinking:
             provider.pre_processing(extra_body=["not-a-dict"])
 
         assert excinfo.value.status_code == 422
+
+    def test_preserves_request_timeout(self, provider):
+        kwargs = provider.pre_processing(stream=False, timeout=45)
+
+        assert kwargs["timeout"] == 45
+
+    def test_accepts_custom_api_base(self):
+        provider = DeepSeekAIProvider(api_key="test-deepseek-key", api_base="https://gateway.example/v1")
+
+        assert provider.base_url == "https://gateway.example/v1"

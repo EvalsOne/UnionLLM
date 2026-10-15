@@ -23,7 +23,9 @@ class DeepSeekAIProvider(BaseProvider):
                 status_code=422, message=f"Missing API key"
             )
         
-        if model_kwargs.get("beta"):
+        if model_kwargs.get("api_base"):
+            self.base_url = model_kwargs["api_base"]
+        elif model_kwargs.get("beta"):
             self.base_url = "https://api.deepseek.com/beta"
         else:
             self.base_url = "https://api.deepseek.com/v1"
@@ -51,7 +53,7 @@ class DeepSeekAIProvider(BaseProvider):
         supported_params = [
             "model", "messages", "max_tokens", "temperature", "top_p", "n",
             "logprobs", "stream", "stop", "presence_penalty", "frequency_penalty",
-            "best_of", "logit_bias", "tools", "tool_choice", "reasoning_effort", "extra_body"
+            "best_of", "logit_bias", "tools", "tool_choice", "reasoning_effort", "extra_body", "timeout"
         ]
         for key in list(kwargs.keys()):
             if key not in supported_params:
