@@ -4,11 +4,29 @@ import os
 from functools import partial
 
 from typing import Any, List, Optional
-from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, litellm, lingyi, stepfun, doubao, deepseek, gemini, azure, anthropic, openai_native
+from .providers import zhipu, moonshot, xai, minimax, qwen, tiangong, baichuan, wenxin, xunfei, xunfei_http, dify, fastgpt, coze, lingyi, stepfun, doubao, deepseek, gemini, azure, anthropic, openai_native
 from .exceptions import ProviderError
-# from litellm import completion as litellm_completion
 
 logger = logging.getLogger(__name__)
+
+# Vendors that speak the OpenAI Chat Completions API: called through the openai
+# SDK at their own base URL (they used to go through LiteLLM). Values are the
+# default base URL and the environment variable holding the API key.
+OPENAI_COMPATIBLE_PROVIDERS = {
+    "xai": ("https://api.x.ai/v1", "XAI_API_KEY"),
+    "openrouter": ("https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
+    "groq": ("https://api.groq.com/openai/v1", "GROQ_API_KEY"),
+}
+# Reserved Qwen models served through DashScope's OpenAI-compatible mode.
+QWEN_COMPATIBLE_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+
+def _litellm_provider(route, **kwargs):
+    """The LiteLLM route, imported on first use; LiteLLM is an optional extra
+    (``unionllm[litellm]``) and a clear error says so when it is missing."""
+    from .providers import litellm as litellm_route
+
+    return litellm_route.LiteLLMProvider(route=route, **kwargs)
 
 class UnionLLM:
     def __init__(self, provider: Optional[str] = None, **kwargs):
@@ -23,19 +41,17 @@ class UnionLLM:
         elif self.provider == "qwen":
             # 根据model判断是否需要使用dashscope的api, 否则使用openai的兼容api
             model = kwargs.get("model")
-            # 预留特殊模型通过litellm调用
+            # 预留特殊模型走 DashScope 的 OpenAI 兼容接口
             if model is not None and model not in ["qwen-special-model"]:
                 # 使用 DashScope 兼容模式（需要 dashscope key）
                 self.provider_instance = qwen.QwenAIProvider(**kwargs)
             else:
-                # 预留特殊模型通过litellm调用
-                dashscope_key = os.getenv("DASHSCOPE_API_KEY")
-                # 仅在未设置 OPENAI_API_KEY 时写入，避免覆盖用户已有 key
-                if not os.getenv("OPENAI_API_KEY"):
-                    os.environ["OPENAI_API_KEY"] = dashscope_key
-                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
-                self.litellm_call_type = 3
-                
+                self.provider_instance = openai_native.OpenAICompatibleProvider(
+                    default_base_url=QWEN_COMPATIBLE_BASE_URL,
+                    api_key_env="DASHSCOPE_API_KEY",
+                    **kwargs,
+                )
+
         elif self.provider == "tiangong":
             self.provider_instance = tiangong.TianGongAIProvider(**kwargs)
         elif self.provider == "baichuan":
@@ -69,7 +85,7 @@ class UnionLLM:
             if use_litellm_anthropic is None:
                 use_litellm_anthropic = os.getenv("UNIONLLM_USE_LITELLM_ANTHROPIC", "").lower() in ("1", "true", "yes")
             if use_litellm_anthropic:
-                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
+                self.provider_instance = _litellm_provider(self.provider, **kwargs)
                 self.litellm_call_type = 1
             else:
                 self.provider_instance = anthropic.AnthropicAIProvider(**kwargs)
@@ -79,25 +95,36 @@ class UnionLLM:
             if model is not None and str(model).lower().startswith("claude"):
                 self.provider_instance = azure.AzureAnthropicProvider(**kwargs)
             else:
-                # 其余模型走现有 Litellm 兼容路径
-                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
-                self.litellm_call_type = 1
+                # 其余模型（GPT、o 系列等）走 openai SDK 的 AzureOpenAI
+                self.provider_instance = azure.AzureOpenAIProvider(**kwargs)
         elif self.provider == "openai":
             self.provider_instance = openai_native.OpenAINativeProvider(**kwargs)
+        elif self.provider in OPENAI_COMPATIBLE_PROVIDERS:
+            base_url, key_env = OPENAI_COMPATIBLE_PROVIDERS[self.provider]
+            self.provider_instance = openai_native.OpenAICompatibleProvider(
+                default_base_url=base_url,
+                api_key_env=key_env,
+                model_prefix=self.provider,
+                **kwargs,
+            )
         elif self.provider:
             if_litellm_support, support_type = self.check_litellm_providers(provider=self.provider)
             if if_litellm_support:
-                self.provider_instance = litellm.LiteLLMProvider(**kwargs)
+                self.provider_instance = _litellm_provider(self.provider, **kwargs)
                 if support_type == 1:
                     self.litellm_call_type = 1
                 elif support_type == 2:
                     self.litellm_call_type = 2
-                elif support_type == 3:
-                    self.litellm_call_type = 3
             else:
                 raise ProviderError(f"Provider '{self.provider}' is not supported.")
+        elif kwargs.get("custom_llm_provider") == "openai":
+            # A user-defined OpenAI-compatible endpoint (api_base/base_url).
+            self.provider_instance = openai_native.OpenAICompatibleProvider(
+                require_api_key=False,
+                **kwargs,
+            )
         else:
-            self.provider_instance = litellm.LiteLLMProvider(**kwargs)
+            self.provider_instance = _litellm_provider(None, **kwargs)
 
     def completion(self, model: str, messages: List[str], **kwargs) -> Any:
         if not self.provider_instance:
@@ -109,14 +136,6 @@ class UnionLLM:
                     model = f"{self.provider}/{model}"     
                 return self.provider_instance.completion(model, messages, **kwargs)
             elif self.litellm_call_type == 2:
-                return self.provider_instance.completion(model, messages, **kwargs)
-            elif self.litellm_call_type == 3:
-                # append OpenAI as provider name and handle special api_base for some providers
-                if self.provider == 'xai':
-                    kwargs['api_base'] = "https://api.x.ai/v1"
-                if self.provider == 'qwen':
-                    kwargs['api_base'] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-                model = f"openai/{model}"
                 return self.provider_instance.completion(model, messages, **kwargs)
         else:
             return self.provider_instance.completion(model, messages, **kwargs)
@@ -147,9 +166,6 @@ class UnionLLM:
         elif provider in ['openai', 'cohere', 'ai21', 'deepinfra', 'ai21', 'alpha_alpha']:
             # provider name should not be added to the model name
             return True, 2
-        elif provider in ['xai', 'qwen']:
-            # append OpenAI as procall as OpenAI campatible API
-            return True, 3
         else:
             return False, 0
         

@@ -4,7 +4,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry]
 name = "unionllm"
-version = "0.2.14"
+version = "0.3.0"
 description = "A Python library for unified access to all kinds of large language models."
 license = "MIT"
 homepage = "https://github.com/EvalsOne/UnionLLM"
@@ -18,8 +18,13 @@ pydantic = "*"
 requests = "*"
 tenacity = "*"
 websocket-client = "*"
-litellm = ">=1.75,<1.95"
 anthropic = "*"
 google-genai = "*"
 azure-identity = "*"
 pillow = "*"
+# Optional: only the long-tail providers routed through LiteLLM need it.
+# LiteLLM still requires openai<3, so it cannot be installed with openai 3.x.
+litellm = { version = ">=1.75,<1.95", optional = true }
+
+[tool.poetry.extras]
+litellm = ["litellm"]

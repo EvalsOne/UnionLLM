@@ -1,10 +1,15 @@
 import os
+import re
 import time
 import base64
 import requests
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse, urlunparse
+
+from openai import AzureOpenAI, OpenAI
 
 from .base_provider import BaseProvider
+from .openai_native import OpenAINativeError, OpenAINativeProvider
 from unionllm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
 
 
@@ -15,24 +20,182 @@ class AzureProviderError(Exception):
         super().__init__(self.message)
 
 
-class AzureAIProvider(BaseProvider):
+class AzureOpenAIProvider(OpenAINativeProvider):
+    """Azure OpenAI (non-Claude) deployments through the openai SDK's AzureOpenAI client.
+
+    Replaces the LiteLLM route. Model names may carry LiteLLM's "azure/" prefix;
+    the deployment is the rest, and its name decides the model family. As
+    LiteLLM did with ``drop_params``, parameters that family rejects are dropped
+    instead of failing the request:
+
+    - o-series and GPT-5+ reasoning models get ``max_completion_tokens`` instead
+      of ``max_tokens``, and lose the sampling parameters they reject;
+    - other models (gpt-4o, gpt-4.1, gpt-5-chat, ...) lose ``reasoning_effort``.
+
+    A base URL ending in ``/openai/v1`` is Azure's v1 API, which takes the plain
+    OpenAI client and no api-version.
     """
-    Fallback Azure provider for non-Claude models.
-    Implementation delegates to OpenAI-compatible clients (e.g., LiteLLM provider)
-    to minimize duplication. This keeps existing behavior intact while we add
-    native Azure flows for Claude (Anthropic Foundry).
-    """
 
-    def __init__(self, **kwargs):
-        # Lazy import to avoid circular import at module load time
-        from .litellm import LiteLLMProvider
+    DEFAULT_API_VERSION = "2025-04-01-preview"
+    GPT_PATTERN = re.compile(r"^gpt-(\d+)(?:\.(\d+))?", re.IGNORECASE)
+    O_SERIES_PATTERN = re.compile(r"^o\d", re.IGNORECASE)
+    # Not accepted by any reasoning model (LiteLLM's o-series and GPT-5 configs);
+    # GPT-5 and later also reject stop sequences.
+    REASONING_UNSUPPORTED_PARAMS = ("presence_penalty", "frequency_penalty", "logit_bias")
+    # Accepted by reasoning models only when reasoning is off (effort "none").
+    SAMPLING_PARAMS = ("top_p", "logprobs", "top_logprobs")
 
-        # Keep an internal LiteLLM provider instance for Azure OpenAI models
-        self._delegate = LiteLLMProvider(**kwargs)
+    def __init__(self, **model_kwargs):
+        self.api_key = (
+            model_kwargs.get("api_key")
+            or os.getenv("AZURE_OPENAI_API_KEY")
+            or os.getenv("AZURE_API_KEY")
+        )
+        if not self.api_key:
+            raise OpenAINativeError(status_code=422, message="Missing Azure OpenAI API key")
 
-    def completion(self, model: str, messages: List[dict], **kwargs) -> ModelResponse:
-        # Simply forward to lite llm provider
-        return self._delegate.completion(model, messages, **kwargs)
+        raw_base_url = (
+            model_kwargs.get("api_base")
+            or model_kwargs.get("base_url")
+            or model_kwargs.get("azure_endpoint")
+            or model_kwargs.get("endpoint")
+            or os.getenv("AZURE_OPENAI_ENDPOINT")
+            or os.getenv("AZURE_API_BASE")
+        )
+        if not raw_base_url:
+            raise OpenAINativeError(
+                status_code=422,
+                message="Missing Azure OpenAI endpoint: pass api_base or set AZURE_OPENAI_ENDPOINT",
+            )
+        self.api_version = self._resolve_api_version(**model_kwargs)
+        self.base_url = self._normalize_base_url(raw_base_url)
+        self.api_mode = model_kwargs.get("api_mode")
+        self.client = self._build_client(self.api_key, self.base_url, self.api_version)
+
+    def _resolve_api_version(self, **kwargs) -> str:
+        return (
+            kwargs.get("api_version")
+            or os.getenv("AZURE_OPENAI_API_VERSION")
+            or os.getenv("AZURE_API_VERSION")
+            or self.DEFAULT_API_VERSION
+        )
+
+    def _normalize_base_url(self, base_url: str) -> str:
+        raw = str(base_url).strip()
+        parsed = urlparse(raw)
+        if not parsed.scheme:
+            parsed = urlparse(f"https://{raw}")
+        return urlunparse(parsed._replace(path=(parsed.path or "").rstrip("/")))
+
+    def _build_client(self, api_key: str, base_url: str, api_version: Optional[str] = None):
+        if urlparse(base_url).path.endswith("/openai/v1"):
+            return OpenAI(api_key=api_key, base_url=f"{base_url}/")
+        return AzureOpenAI(
+            api_key=api_key,
+            azure_endpoint=base_url,
+            api_version=api_version or self.api_version,
+        )
+
+    def _resolve_client(self, **kwargs):
+        api_key = kwargs.get("api_key") or self.api_key
+        base_url = self._normalize_base_url(
+            kwargs.get("api_base")
+            or kwargs.get("base_url")
+            or kwargs.get("azure_endpoint")
+            or kwargs.get("endpoint")
+            or self.base_url
+        )
+        api_version = kwargs.get("api_version") or self.api_version
+        if (api_key, base_url, api_version) == (self.api_key, self.base_url, self.api_version):
+            return self.client
+        return self._build_client(api_key, base_url, api_version)
+
+    @staticmethod
+    def deployment_name(model: str) -> str:
+        name = str(model or "")
+        if name.lower().startswith("azure/"):
+            return name.split("/", 1)[1]
+        return name
+
+    @classmethod
+    def model_family(cls, model: str) -> str:
+        """Return "o_series", "gpt5" (GPT-5 and later reasoning models) or "chat"."""
+        name = cls.deployment_name(model)
+        if cls.O_SERIES_PATTERN.match(name):
+            return "o_series"
+        match = cls.GPT_PATTERN.match(name)
+        # gpt-5-chat* are plain chat models; versioned ones (gpt-5.2-chat) reason.
+        if match and int(match.group(1)) >= 5 and not name.lower().startswith("gpt-5-chat"):
+            return "gpt5"
+        return "chat"
+
+    @classmethod
+    def supports_no_reasoning(cls, model: str) -> bool:
+        """Whether reasoning_effort="none" (and then sampling) is accepted.
+
+        Mirrors LiteLLM's model map: gpt-5.1, gpt-5.4+ and gpt-6+, except the
+        -chat, -codex and -pro variants.
+        """
+        name = cls.deployment_name(model).lower()
+        if any(tag in name for tag in ("-chat", "-codex", "-pro")):
+            return False
+        match = cls.GPT_PATTERN.match(name)
+        if not match:
+            return False
+        major, minor = int(match.group(1)), int(match.group(2) or 0)
+        return major >= 6 or (major == 5 and (minor == 1 or minor >= 4))
+
+    def _adapt_params_to_model(self, model: str, params: dict) -> dict:
+        family = self.model_family(model)
+        if family == "chat":
+            params.pop("reasoning_effort", None)
+            return params
+
+        if "max_tokens" in params:
+            max_tokens = params.pop("max_tokens")
+            params.setdefault("max_completion_tokens", max_tokens)
+        for key in self.REASONING_UNSUPPORTED_PARAMS:
+            params.pop(key, None)
+
+        if family == "gpt5":
+            params.pop("stop", None)
+
+        effort = params.get("reasoning_effort")
+        if isinstance(effort, dict):
+            effort = effort.get("effort")
+        reasoning_off = family == "gpt5" and self.supports_no_reasoning(model) and effort in (None, "none")
+        if effort == "none" and not reasoning_off:
+            params.pop("reasoning_effort", None)
+        if not reasoning_off:
+            for key in self.SAMPLING_PARAMS:
+                params.pop(key, None)
+            if params.get("temperature") not in (None, 1):
+                params.pop("temperature", None)
+        return params
+
+    def _ensure_chat_tool_reasoning_compatibility(self, model: str, params: dict) -> dict:
+        # The per-model hook of the Chat Completions path; runs after the GPT-5.6
+        # tools rule so that a forced reasoning_effort="none" is seen here.
+        params = super()._ensure_chat_tool_reasoning_compatibility(model, params)
+        return self._adapt_params_to_model(model, params)
+
+    def _post_chat_stream_processing(self, response, model: str):
+        # Azure opens a stream with a prompt_filter_results chunk that has no
+        # choices and no usage; it carries nothing for UnionLLM's callers.
+        def without_filter_only_chunks(chunks):
+            for chunk in chunks:
+                if not getattr(chunk, "choices", None) and getattr(chunk, "usage", None) is None:
+                    continue
+                yield chunk
+
+        return super()._post_chat_stream_processing(without_filter_only_chunks(response), model=model)
+
+    def completion(self, model: str, messages: list, **kwargs):
+        return super().completion(self.deployment_name(model), messages, **kwargs)
+
+
+# Backwards-compatible name; it used to delegate to LiteLLM.
+AzureAIProvider = AzureOpenAIProvider
 
 
 class AzureAnthropicProvider(BaseProvider):

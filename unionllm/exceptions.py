@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 class UnionLLMError(Exception):
     """Base exception class for UnionLLM."""
     pass
@@ -20,7 +24,11 @@ from openai import (
     APITimeoutError, 
     APIConnectionError, 
 )
-import httpx
+
+if TYPE_CHECKING:
+    # Only used in annotations: openai 3.x ships on httpx2 and no longer
+    # installs httpx, so a runtime import would break `import unionllm`.
+    import httpx
 
 class AuthenticationError(AuthenticationError):  # type: ignore
     def __init__(self, message, llm_provider, model, response: httpx.Response):

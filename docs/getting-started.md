@@ -96,7 +96,15 @@ export ANTHROPIC_API_KEY="..."
 
 也可以将 `api_key` 传入调用。每个 provider 的环境变量、默认端点和必要的额外参数都列在[Provider 矩阵](providers.md)。
 
-## LiteLLM 路由
+## LiteLLM 路由（可选）
+
+LiteLLM 自 0.3.0 起是可选依赖，需单独安装：
+
+```bash
+python -m pip install "unionllm[litellm]"
+```
+
+LiteLLM 仍要求 `openai<3`。未安装时，下列调用会抛出 `LiteLLMUnavailableError`。
 
 对于 `UnionLLM.check_litellm_providers()` 中的 provider，库会把 provider 前缀按当前规则加入模型名，交给 LiteLLM。例如：
 

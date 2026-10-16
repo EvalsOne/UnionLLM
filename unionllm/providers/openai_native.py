@@ -927,3 +927,49 @@ class OpenAINativeProvider(BaseProvider):
             self._raise_mapped_error(exc, model=model)
         except Exception as exc:
             self._raise_mapped_error(exc, model=model)
+
+
+class OpenAICompatibleProvider(OpenAINativeProvider):
+    """A vendor or self-hosted server that speaks the OpenAI Chat Completions API.
+
+    Replaces the LiteLLM "openai/<model>" route for xAI, OpenRouter, Groq and
+    user-defined endpoints. Unlike `OpenAINativeProvider`, the base URL is used
+    verbatim (vendors put the API under their own path, e.g. Groq's
+    ``/openai/v1``) and the OpenAI environment key is never used, so a
+    ConsoleX OpenAI key cannot leak to a third-party endpoint.
+    """
+
+    # Self-hosted servers often run without authentication, but the openai SDK
+    # refuses to build a client without some key.
+    KEYLESS_PLACEHOLDER = "unused"
+
+    def __init__(self, default_base_url=None, api_key_env=None, model_prefix=None, require_api_key=True, **model_kwargs):
+        self.model_prefix = model_prefix
+        self.api_key = model_kwargs.get("api_key") or (os.getenv(api_key_env) if api_key_env else None)
+        if not self.api_key:
+            if require_api_key:
+                raise OpenAINativeError(status_code=422, message="Missing API key")
+            self.api_key = self.KEYLESS_PLACEHOLDER
+
+        raw_base_url = model_kwargs.get("base_url") or model_kwargs.get("api_base") or default_base_url
+        if not raw_base_url:
+            raise OpenAINativeError(
+                status_code=422,
+                message="Missing base_url or api_base for the OpenAI-compatible endpoint",
+            )
+        self.base_url = self._normalize_base_url(raw_base_url)
+        self.api_mode = model_kwargs.get("api_mode")
+        self.client = self._build_client(self.api_key, self.base_url)
+
+    def _normalize_base_url(self, base_url: str) -> str:
+        raw = str(base_url).strip()
+        parsed = urlparse(raw)
+        if not parsed.scheme:
+            parsed = urlparse(f"https://{raw}")
+        return urlunparse(parsed._replace(path=(parsed.path or "").rstrip("/")))
+
+    def completion(self, model: str, messages: list, **kwargs):
+        # Callers that used the LiteLLM route may still send "<provider>/<model>".
+        if self.model_prefix and model and model.lower().startswith(f"{self.model_prefix}/"):
+            model = model.split("/", 1)[1]
+        return super().completion(model, messages, **kwargs)

@@ -475,7 +475,7 @@ def test_unionllm_can_fallback_to_litellm_for_anthropic(monkeypatch):
             return None
 
     monkeypatch.setenv("UNIONLLM_USE_LITELLM_ANTHROPIC", "true")
-    monkeypatch.setattr("unionllm.main.litellm.LiteLLMProvider", FakeLiteLLMProvider)
+    monkeypatch.setattr("unionllm.providers.litellm.LiteLLMProvider", FakeLiteLLMProvider)
 
     client = UnionLLM(provider="anthropic")
     assert isinstance(client.provider_instance, FakeLiteLLMProvider)

@@ -9,7 +9,7 @@
 | `zhipuai` | `ZHIPU_API_KEY` | 默认 OpenAI-compatible BigModel v4 地址 | 支持 OpenAI 风格 chat 参数与流式。 |
 | `moonshot` | `MOONSHOT_API_KEY` | 默认 `https://api.moonshot.cn/v1` | `kimi-k2.5` 可在调用前将 HTTP(S) 图片/视频 URL 或本地文件转为 data URI。 |
 | `minimax` | `MINIMAX_API_KEY` | `api_base`；也可传 `endpoint_url` | 默认 endpoint 为 `<api_base>/text/chatcompletion_v2`。 |
-| `qwen` | `DASHSCOPE_API_KEY` | 默认使用 DashScope Python SDK | 特殊模型 `qwen-special-model` 走 LiteLLM OpenAI-compatible 分支。 |
+| `qwen` | `DASHSCOPE_API_KEY` | 默认使用 DashScope Python SDK | 特殊模型 `qwen-special-model` 走 DashScope 的 OpenAI-compatible 接口。 |
 | `tiangong` | `TIANGONG_APP_KEY`、`TIANGONG_APP_SECRET` | `app_key`、`app_secret` | 双凭证 provider。 |
 | `baichuan` | `BAICHUAN_API_KEY` | `api_base` | OpenAI-compatible 适配器。 |
 | `wenxin` | `ERNIE_API_KEY`，或 `ERNIE_CLIENT_ID` + `ERNIE_CLIENT_SECRET` | `api_key` 或 `client_id` + `client_secret` | 两套认证路径由实现决定。 |
@@ -22,7 +22,7 @@
 | `gemini` | `GEMINI_API_KEY` | `enable_context_cache`、`context_cache_min_tokens`、`context_cache_ttl_seconds` | 使用 `google-genai`；支持工具结果与可选显式上下文缓存。 |
 | `openai` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` 或 `OPENAI_API_BASE`；调用级 `base_url` / `api_base` | 使用原生 OpenAI SDK，不再经 LiteLLM。默认使用 Chat Completions；GPT-5.6 搭配 function tools 时会将 Chat 的 `reasoning_effort` 设为 `none`。显式传 `api_mode="responses"` 可改走 Responses API，并保留 reasoning。 |
 | `anthropic` | `ANTHROPIC_API_KEY`、可选 `ANTHROPIC_BASE_URL`、`ANTHROPIC_VERSION`、`ANTHROPIC_BETA` | `use_litellm_anthropic=True` 或 `UNIONLLM_USE_LITELLM_ANTHROPIC=1` 可改走 LiteLLM | 默认使用 Anthropic Messages API；缺少 `max_tokens` 时默认 16384。Claude 5 会将 `reasoning_effort` 映射为 Adaptive Thinking 的 `thinking.type=adaptive` 与 `output_config.effort`。 |
-| `azure` | Claude 原生分支使用 `AZURE_ANTHROPIC_API_BASE` 或 `AZURE_ANTHROPIC_ENDPOINT` | 也可传 `api_base` / `endpoint`；仅当模型名以 `claude` 开头走原生分支 | 非 Claude Azure 模型交给 LiteLLM；Claude 原生分支依赖 `anthropic` 与 `azure-identity`。当前实现只提供非流式 Claude 调用。 |
+| `azure` | Claude 原生分支使用 `AZURE_ANTHROPIC_API_BASE` 或 `AZURE_ANTHROPIC_ENDPOINT`；其他模型使用 `AZURE_OPENAI_API_KEY`、`AZURE_OPENAI_ENDPOINT`、`AZURE_OPENAI_API_VERSION`（也接受 LiteLLM 的 `AZURE_API_*`） | 也可传 `api_base` / `base_url` / `endpoint`、`api_version`；模型名以 `claude` 开头走 Claude 原生分支 | 非 Claude 模型经 openai SDK 的 `AzureOpenAI` 调用：去掉模型名的 `azure/` 前缀作为部署名；未给 `api_version` 时用 `2025-04-01-preview`；地址以 `/openai/v1` 结尾时改用 v1 API。与 LiteLLM 的 `drop_params` 一致，o 系列与 GPT-5 及以后的推理模型把 `max_tokens` 改为 `max_completion_tokens` 并丢弃不支持的采样参数，其他模型丢弃 `reasoning_effort`。流式会跳过 Azure 开头的 prompt_filter_results 空块。Claude 原生分支依赖 `anthropic` 与 `azure-identity`。 |
 
 ### Agent 应用 provider
 
@@ -74,15 +74,25 @@ response = client.completion(
 
 省略 `api_mode` 时仍默认使用 Chat Completions，不会因为模型名称自动切换 API。
 
+## OpenAI-compatible provider
+
+下列 provider 经 openai SDK 调用各自的 Chat Completions 接口，不经 LiteLLM。地址原样使用（不会补 `/v1`），也不会读取 `OPENAI_API_KEY`，以免把 OpenAI 密钥发到第三方端点。模型名若带 `<provider>/` 前缀会被去掉。
+
+| Provider | 环境变量 | 默认地址 |
+| --- | --- | --- |
+| `xai` | `XAI_API_KEY` | `https://api.x.ai/v1` |
+| `openrouter` | `OPENROUTER_API_KEY` | `https://openrouter.ai/api/v1` |
+| `groq` | `GROQ_API_KEY` | `https://api.groq.com/openai/v1` |
+| 不传 `provider`，`custom_llm_provider="openai"` | 无（`api_key` 可省略） | 必须传 `api_base` 或 `base_url` |
+
 ## LiteLLM allow-list 和行为
 
-下列 `provider` 由 `UnionLLM.check_litellm_providers()` 处理：
+LiteLLM 是可选依赖，需安装 `unionllm[litellm]`；未安装时下列分支抛出 `LiteLLMUnavailableError`。下列 `provider` 由 `UnionLLM.check_litellm_providers()` 处理：
 
 - 自动为模型名添加 provider 前缀：`azure`、`azure_ai`、`anthropic`、`deepseek`、`sagemaker`、`bedrock`、`vertex_ai`、`vertex_ai_beta`、`palm`、`gemini`、`mistral`、`cloudflare`、`huggingface`、`replicate`、`together_ai`、`openrouter`、`baseten`、`nlp_cloud`、`petals`、`ollama`、`perplexity`、`groq`、`anyscale`、`watsonx`、`voyage`、`xinference`。
 - 原样把模型名交给 LiteLLM：`openai`、`cohere`、`ai21`、`deepinfra`、`alpha_alpha`。
-- 以 OpenAI-compatible 方式调用：`xai`、`qwen`。
 
-其中 `openai`、`anthropic`、`deepseek`、`gemini`、`qwen` 和 `azure` 已有前置的专用路由，实际是否进入 LiteLLM 取决于[请求路由](architecture.md)。此列表是当前代码分支而非“LiteLLM 全部 provider”承诺。
+其中 `openai`、`anthropic`、`deepseek`、`gemini`、`azure`、`openrouter` 和 `groq` 已有前置的专用路由，实际是否进入 LiteLLM 取决于[请求路由](architecture.md)。此列表是当前代码分支而非“LiteLLM 全部 provider”承诺。
 
 ## 迁移旧页面
 

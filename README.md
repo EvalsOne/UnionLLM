@@ -11,6 +11,8 @@ python -m pip install unionllm
 export ZHIPU_API_KEY="..."
 ```
 
+自 0.3.0 起 LiteLLM 是可选依赖：只有 LiteLLM 路由需要它，用 `python -m pip install "unionllm[litellm]"` 安装。LiteLLM 仍要求 `openai<3`，因此不能与 openai 3.x 共存；未安装时这些路由会抛出 `LiteLLMUnavailableError`（`ProviderError` 的子类）。
+
 ```python
 from unionllm import unionchat
 
@@ -43,8 +45,9 @@ for chunk in unionchat(
 | 路由类别 | provider 值 |
 | --- | --- |
 | 原生/直接适配 | `zhipuai`、`moonshot`、`minimax`、`qwen`、`tiangong`、`baichuan`、`wenxin`、`xunfei`、`xunfei_http`、`dify`、`fastgpt`、`coze`、`lingyi`、`stepfun`、`doubao`、`deepseek`、`gemini`、`anthropic`、`openai` |
-| Azure | `azure`：Claude 模型走 Azure Anthropic 原生实现；其他模型经 LiteLLM |
-| LiteLLM 路由 | `bedrock`、`ollama`、`mistral`、`groq`、`openrouter` 等固定 allow-list；也可省略 `provider`，直接提供 LiteLLM 格式的 `model` |
+| Azure | `azure`：Claude 模型走 Azure Anthropic 原生实现；其他模型（GPT、o 系列）走 openai SDK 的 `AzureOpenAI` |
+| OpenAI-compatible | `xai`、`openrouter`、`groq`，以及不传 `provider`、传 `custom_llm_provider="openai"` 与 `api_base` 的自定义端点：经 openai SDK 调用 |
+| LiteLLM 路由（可选） | `bedrock`、`ollama`、`mistral`、`vertex_ai` 等固定 allow-list；也可省略 `provider`，直接提供 LiteLLM 格式的 `model`。需安装 `unionllm[litellm]` |
 
 不要把“支持”理解为所有 provider 具有相同能力。多模态、工具调用、推理参数、缓存、流式和上下文信息均取决于具体适配器。请先查看完整的[Provider 矩阵与配置](docs/providers.md)。
 
