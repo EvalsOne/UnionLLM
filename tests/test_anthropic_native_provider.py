@@ -150,6 +150,9 @@ def test_prepare_request_uses_sensible_anthropic_max_tokens_default(monkeypatch)
         "claude-sonnet-5",
         "claude-fable-5",
         "anthropic/claude-mythos-5-20260701",
+        "claude-haiku-5-5",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
     ],
 )
 def test_claude_5_reasoning_effort_uses_adaptive_thinking(monkeypatch, model):
@@ -226,7 +229,9 @@ def test_legacy_claude_model_keeps_manual_thinking_budget(monkeypatch):
         "type": "enabled",
         "budget_tokens": 2047,
     }
-    assert params["temperature"] == 1
+    # Temperature defaults to 1; sending it is a TypeError on anthropic 1.x.
+    assert "temperature" not in params
+    assert "extra_body" not in params
     assert "output_config" not in params
 
 

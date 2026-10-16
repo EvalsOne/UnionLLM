@@ -18,13 +18,45 @@ class AnthropicProviderError(Exception):
         super().__init__(self.message)
 
 
+# Claude models whose only thinking mode is adaptive (a `budget_tokens`
+# thinking config is a 400) and which reject sampling parameters: the
+# Claude 5 family and Claude Opus 4.7 / 4.8.
+ADAPTIVE_ONLY_MODEL_PATTERN = re.compile(
+    r"claude-(?:(?:opus|sonnet|haiku|fable|mythos)-5|opus-4-[78])(?:$|[-_.:])",
+    re.IGNORECASE,
+)
+
+SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
+
+
+def place_sampling_params(params: Dict[str, Any], model: Optional[str]) -> Dict[str, Any]:
+    """Take temperature/top_p/top_k out of the Messages.create keyword arguments.
+
+    anthropic 1.x removed them from Messages.create, so passing one as a keyword
+    is a TypeError. The API still honours them on older models, so they are sent
+    in `extra_body`, which every SDK version accepts; a value the caller already
+    put in `extra_body` wins. They are dropped when thinking is on (Anthropic
+    rejects them alongside thinking, and temperature defaults to 1 anyway) and
+    for models that reject them outright.
+    """
+    sampling = {key: params.pop(key) for key in SAMPLING_PARAMS if key in params}
+    sampling = {key: value for key, value in sampling.items() if value is not None}
+    thinking = params.get("thinking")
+    thinking_on = isinstance(thinking, dict) and thinking.get("type") in ("enabled", "adaptive")
+    if not sampling or thinking_on or (model and ADAPTIVE_ONLY_MODEL_PATTERN.search(str(model))):
+        return params
+    extra_body = params.get("extra_body")
+    extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
+    for key, value in sampling.items():
+        extra_body.setdefault(key, value)
+    params["extra_body"] = extra_body
+    return params
+
+
 class AnthropicAIProvider(BaseProvider):
     DEFAULT_BASE_URL = "https://api.anthropic.com"
     DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
-    CLAUDE_5_MODEL_PATTERN = re.compile(
-        r"claude-(?:opus|sonnet|fable|mythos)-5(?:$|[-_.:])",
-        re.IGNORECASE,
-    )
+    ADAPTIVE_THINKING_MODEL_PATTERN = ADAPTIVE_ONLY_MODEL_PATTERN
     ADAPTIVE_EFFORT_MAP = {
         "minimal": "low",
         "low": "low",
@@ -83,8 +115,8 @@ class AnthropicAIProvider(BaseProvider):
 
     @classmethod
     def _uses_adaptive_thinking(cls, model: Optional[str]) -> bool:
-        """Return whether the model belongs to the Claude 5 family."""
-        return bool(model and cls.CLAUDE_5_MODEL_PATTERN.search(str(model)))
+        """Return whether the model takes adaptive thinking only (Claude 5, Opus 4.7/4.8)."""
+        return bool(model and cls.ADAPTIVE_THINKING_MODEL_PATTERN.search(str(model)))
 
     def _preprocess(self, model: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         supported = {
@@ -166,7 +198,7 @@ class AnthropicAIProvider(BaseProvider):
                 output_config.setdefault("effort", mapped_effort)
                 clean["output_config"] = output_config
         elif reasoning_effort is not None and "thinking" not in clean:
-            # Anthropic thinking requires token budget and works best with temperature=1.
+            # Older Claude models need an explicit thinking token budget.
             max_tokens = int(clean.get("max_tokens", self.DEFAULT_MAX_TOKENS))
             if max_tokens <= 1024:
                 max_tokens = 1025
@@ -175,10 +207,9 @@ class AnthropicAIProvider(BaseProvider):
                 "type": "enabled",
                 "budget_tokens": max_tokens - 1,
             }
-            clean["temperature"] = 1
 
         clean.pop("reasoning_effort", None)
-        return clean
+        return place_sampling_params(clean, model)
 
     def _get(self, payload: Any, key: str, default: Any = None) -> Any:
         if isinstance(payload, dict):

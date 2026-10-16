@@ -8,6 +8,7 @@ from urllib.parse import urlparse, urlunparse
 
 from openai import AzureOpenAI, OpenAI
 
+from .anthropic import place_sampling_params
 from .base_provider import BaseProvider
 from .openai_native import OpenAINativeError, OpenAINativeProvider
 from unionllm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
@@ -252,7 +253,7 @@ class AzureAnthropicProvider(BaseProvider):
         # Create AnthropicFoundry client
         self.client = AnthropicFoundry(api_key=api_key, base_url=api_base)
 
-    def _preprocess(self, **kwargs) -> Dict[str, Any]:
+    def _preprocess(self, model: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         # Keep only commonly-supported params for Claude messages.create
         supported = {
             "max_tokens",
@@ -298,10 +299,9 @@ class AzureAnthropicProvider(BaseProvider):
                 "type": "enabled",
                 "budget_tokens": budget_tokens,
             }
-            clean['temperature'] = 1
             clean.pop("reasoning_effort", None)
 
-        return clean
+        return place_sampling_params(clean, model)
 
     def _convert_openai_to_anthropic_messages(self, messages: List[dict]) -> tuple[Optional[str], List[dict]]:
         """
@@ -842,7 +842,7 @@ class AzureAnthropicProvider(BaseProvider):
                 message=f"Failed to convert messages format: {str(e)}"
             )
         
-        params = self._preprocess(**kwargs)
+        params = self._preprocess(model=model, **kwargs)
         params["stream"] = True
         
         # Add system parameter if system message exists
@@ -1096,7 +1096,7 @@ class AzureAnthropicProvider(BaseProvider):
                     message=f"Failed to convert messages format: {str(e)}"
                 )
 
-            params = self._preprocess(**kwargs)
+            params = self._preprocess(model=model, **kwargs)
             
             # Add system parameter if system message exists
             if system_message:
