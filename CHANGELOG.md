@@ -15,6 +15,7 @@ PyPI 上有些版本没有对应的版本提交，下面按发布日期合并记
 - **`xai`、`openrouter`、`groq` 不再经过 LiteLLM。** 它们改由 openai SDK 调用各自的 OpenAI 兼容接口（`OpenAICompatibleProvider`），只读取 `XAI_API_KEY` / `OPENROUTER_API_KEY` / `GROQ_API_KEY`，不会读取 `OPENAI_API_KEY`。
 - **自定义 OpenAI 兼容端点不再经过 LiteLLM。** 不传 `provider`、传 `custom_llm_provider="openai"` 和 `api_base` 的调用改走 `OpenAICompatibleProvider`，地址原样使用，不再补 `/v1`。
 - **`qwen` 的保留模型 `qwen-special-model` 不再经过 LiteLLM，** 改为直接调用 DashScope 的 OpenAI 兼容接口。
+- **`UnionLLM(provider="azure")` 不带 `model` 构造时，不再立即创建 Azure OpenAI 客户端。** 分支改为在每次 `completion()` 时按模型选择（见下方修复），客户端在第一次调用时创建，缺少 API key 或地址的错误也推迟到那时抛出；在此之前 `provider_instance` 为 `None`。构造时传了 `model` 的调用不变。
 
 ### 新增
 
@@ -26,11 +27,9 @@ PyPI 上有些版本没有对应的版本提交，下面按发布日期合并记
 
 - Anthropic 与 Azure Claude：`temperature`、`top_p`、`top_k` 改为放进 `extra_body` 发送。anthropic 1.x 的 `messages.create` 删除了这三个关键字参数，旧写法会在请求发出前就抛出 `TypeError`。开启推理时，以及在只接受默认采样的模型上，这三个参数会被丢弃；开启推理时也不再强制设置 `temperature=1`。
 - 只支持 Adaptive Thinking 的模型列表补上了 Claude Haiku 5.5 与 Claude Opus 4.7 / 4.8。这些模型会拒绝 `budget_tokens` 形式的推理配置。
-
-### 已知问题
-
-- 已在 anthropic 2.x 下跑过测试，但 Azure Claude 分支未固定 `anthropic-version`，SDK 2.x 默认使用 API 版本 `2026-10-21`，该版本会拒绝任何采样参数。在这个组合下给 Azure Claude 传 `temperature` 可能得到 400，该组合尚未用真实请求验证。原生 `anthropic` 分支固定发送 `2023-06-01`，不受影响。
-- 通过 `unionchat(provider="azure", model="claude-...")` 调用时，路由看不到 `model`，请求不会进入 Azure Claude 分支。需要 Azure Claude 时，请使用 `UnionLLM(provider="azure", model="claude-...")` 构造客户端，且模型名不要带 `azure/` 前缀。0.2.x 中同样存在这个问题。
+- Azure Claude 的路由：`unionchat(provider="azure", model="claude-...")`，以及不带 `model` 构造、在 `completion()` 时才给出模型的 `UnionLLM(provider="azure")`，现在都会进入 Azure Claude 分支。分支改为按每次调用的模型选择。判断 Claude 时、以及 Azure Claude 取部署名时，都会去掉 LiteLLM 风格的 `azure/` 前缀，`azure/claude-sonnet-4-5` 与 `claude-sonnet-4-5` 等价。此前这些调用会被发到 Azure OpenAI 的 `/openai/deployments/...` 地址并得到 404；0.2.x 中同样存在这个问题。
+- Azure Claude 固定发送 `anthropic-version: 2023-06-01`，与原生 `anthropic` 分支一致；可用参数 `anthropic_version` 或环境变量 `AZURE_ANTHROPIC_VERSION` 改。此前它使用 anthropic SDK 的默认版本，anthropic 2.x 默认的 `2026-10-21` 对任何 `temperature`、`top_p`、`top_k` 都返回 400。
+- Anthropic 与 Azure Claude：API 版本设为 `2026-10-21` 或更新时，不再发送采样参数，避免 400。
 
 ## [0.2.14] - 2026-10-15
 

@@ -45,7 +45,8 @@ def sent_kwargs(client):
 def test_unionllm_routes_azure_gpt_to_openai_sdk_and_claude_to_foundry(azure_client, monkeypatch):
     assert isinstance(UnionLLM(provider="azure", model="gpt-4o-mini", **AZURE_KWARGS).provider_instance,
                       AzureOpenAIProvider)
-    assert isinstance(UnionLLM(provider="AZURE", **AZURE_KWARGS).provider_instance, AzureOpenAIProvider)
+    # Without a model the choice waits for completion(), which names it.
+    assert UnionLLM(provider="AZURE", **AZURE_KWARGS).provider_instance is None
 
     monkeypatch.setattr("anthropic.AnthropicFoundry", MagicMock())
     client = UnionLLM(provider="azure", model="claude-sonnet-4-5", **AZURE_KWARGS)
@@ -244,7 +245,8 @@ def test_stream_skips_prompt_filter_chunk_and_keeps_tool_calls_and_usage(azure_c
 
 def test_byok_endpoint_field_is_accepted(azure_client):
     _, azure_ctor, _ = azure_client
-    UnionLLM(provider="azure", api_key="azure-key", endpoint="https://byok.openai.azure.com/", api_version="2024-10-21")
+    UnionLLM(provider="azure", api_key="azure-key", endpoint="https://byok.openai.azure.com/",
+             api_version="2024-10-21").completion(model="gpt-4o", messages=MESSAGES)
     assert azure_ctor.call_args.kwargs["azure_endpoint"] == "https://byok.openai.azure.com"
 
 
@@ -255,7 +257,7 @@ def test_v1_endpoint_uses_plain_openai_client(azure_client):
         provider="azure",
         api_key="azure-key",
         api_base="https://example.services.ai.azure.com/openai/v1/",
-    )
+    ).completion(model="gpt-4o", messages=MESSAGES)
 
     openai_ctor.assert_called_once_with(
         api_key="azure-key", base_url="https://example.services.ai.azure.com/openai/v1/"
@@ -276,10 +278,11 @@ def test_call_time_credentials_build_a_new_client(azure_client):
 
 
 def test_missing_credentials_fail_clearly(azure_client):
+    # At construction when the model is given, otherwise at the first call.
     with pytest.raises(OpenAINativeError) as excinfo:
-        UnionLLM(provider="azure", api_base="https://example-resource.openai.azure.com/")
+        UnionLLM(provider="azure", model="gpt-4o", api_base="https://example-resource.openai.azure.com/")
     assert excinfo.value.status_code == 422
 
     with pytest.raises(OpenAINativeError) as excinfo:
-        UnionLLM(provider="azure", api_key="azure-key")
+        UnionLLM(provider="azure", api_key="azure-key").completion(model="gpt-4o", messages=MESSAGES)
     assert "endpoint" in str(excinfo.value)

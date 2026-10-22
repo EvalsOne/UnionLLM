@@ -28,22 +28,34 @@ ADAPTIVE_ONLY_MODEL_PATTERN = re.compile(
 
 SAMPLING_PARAMS = ("temperature", "top_p", "top_k")
 
+# Both Claude providers send this anthropic-version unless told otherwise.
+# anthropic 2.x defaults to 2026-10-21, which rejects every sampling parameter
+# (400, even at the default value); 2023-06-01 still honours them.
+DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
+# The first API version without sampling parameters.
+SAMPLING_REMOVED_API_VERSION = "2026-10-21"
 
-def place_sampling_params(params: Dict[str, Any], model: Optional[str]) -> Dict[str, Any]:
+
+def place_sampling_params(
+    params: Dict[str, Any], model: Optional[str], api_version: Optional[str] = None
+) -> Dict[str, Any]:
     """Take temperature/top_p/top_k out of the Messages.create keyword arguments.
 
     anthropic 1.x removed them from Messages.create, so passing one as a keyword
     is a TypeError. The API still honours them on older models, so they are sent
     in `extra_body`, which every SDK version accepts; a value the caller already
     put in `extra_body` wins. They are dropped when thinking is on (Anthropic
-    rejects them alongside thinking, and temperature defaults to 1 anyway) and
-    for models that reject them outright.
+    rejects them alongside thinking, and temperature defaults to 1 anyway), for
+    models that reject them outright, and when the request goes out with API
+    version 2026-10-21 or later (`api_version`, the anthropic-version header).
     """
     sampling = {key: params.pop(key) for key in SAMPLING_PARAMS if key in params}
     sampling = {key: value for key, value in sampling.items() if value is not None}
     thinking = params.get("thinking")
     thinking_on = isinstance(thinking, dict) and thinking.get("type") in ("enabled", "adaptive")
-    if not sampling or thinking_on or (model and ADAPTIVE_ONLY_MODEL_PATTERN.search(str(model))):
+    # API versions are ISO dates, so string order is date order.
+    version_rejects = bool(api_version) and str(api_version) >= SAMPLING_REMOVED_API_VERSION
+    if not sampling or thinking_on or version_rejects or (model and ADAPTIVE_ONLY_MODEL_PATTERN.search(str(model))):
         return params
     extra_body = params.get("extra_body")
     extra_body = dict(extra_body) if isinstance(extra_body, dict) else {}
@@ -55,7 +67,7 @@ def place_sampling_params(params: Dict[str, Any], model: Optional[str]) -> Dict[
 
 class AnthropicAIProvider(BaseProvider):
     DEFAULT_BASE_URL = "https://api.anthropic.com"
-    DEFAULT_ANTHROPIC_VERSION = "2023-06-01"
+    DEFAULT_ANTHROPIC_VERSION = DEFAULT_ANTHROPIC_VERSION
     ADAPTIVE_THINKING_MODEL_PATTERN = ADAPTIVE_ONLY_MODEL_PATTERN
     ADAPTIVE_EFFORT_MAP = {
         "minimal": "low",
@@ -209,7 +221,7 @@ class AnthropicAIProvider(BaseProvider):
             }
 
         clean.pop("reasoning_effort", None)
-        return place_sampling_params(clean, model)
+        return place_sampling_params(clean, model, getattr(self, "anthropic_version", None))
 
     def _get(self, payload: Any, key: str, default: Any = None) -> Any:
         if isinstance(payload, dict):

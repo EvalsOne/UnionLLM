@@ -69,7 +69,7 @@ response = client.completion(
 | --- | --- |
 | `ANTHROPIC_API_KEY`；可选 `ANTHROPIC_BASE_URL`、`ANTHROPIC_VERSION`、`ANTHROPIC_BETA` | `anthropic_version`、`anthropic_beta`、`use_litellm_anthropic` |
 
-- 使用 Anthropic Messages API。默认发送 `anthropic-version: 2023-06-01`，可用参数或 `ANTHROPIC_VERSION` 改。
+- 使用 Anthropic Messages API。默认发送 `anthropic-version: 2023-06-01`，可用参数或 `ANTHROPIC_VERSION` 改。anthropic 2.x 自己的默认值是 `2026-10-21`，该版本拒绝采样参数；版本设为 `2026-10-21` 或更新时，采样参数会被丢弃。
 - 未传 `max_tokens` 时默认 16384。
 - 推理：Claude 5 系列（包括 Haiku 5.5）与 Claude Opus 4.7 / 4.8 只支持 Adaptive Thinking，`reasoning_effort` 会映射为 `thinking.type=adaptive` 与 `output_config.effort`；更早的模型使用 `budget_tokens`。
 - 采样参数：`temperature`、`top_p`、`top_k` 放在 `extra_body` 中发送（anthropic 1.x 的 `messages.create` 删除了这三个关键字参数）。开启推理时，以及在上述只接受默认采样的模型上，这三个参数会被丢弃。
@@ -86,9 +86,9 @@ response = client.completion(
 
 ## Azure
 
-`provider="azure"` 按模型名分成两个分支：模型名以 `claude` 开头的走 Claude 分支，其余走 Azure OpenAI 分支。
+`provider="azure"` 按模型名分成两个分支：模型名去掉 `azure/` 前缀后以 `claude` 开头（不区分大小写）的走 Claude 分支，其余走 Azure OpenAI 分支。
 
-> 注意：判断依据是构造 `UnionLLM` 时传入的 `model`。`unionchat` 不会把 `model` 传给路由，所以用 `unionchat` 调用 Azure Claude 总会进入 Azure OpenAI 分支。需要 Azure Claude 时，请用 `UnionLLM(provider="azure", model="claude-...")`，模型名不要带 `azure/` 前缀。
+判断依据是每次调用的模型，`unionchat` 与在 `completion()` 时才给出模型的 `UnionLLM(provider="azure")` 都能进入 Claude 分支。构造时传了 `model` 会立即创建对应分支的客户端；没传时在第一次调用时创建。两个分支的客户端各创建一次并复用，都使用构造时的配置。
 
 ### Azure OpenAI（GPT、o 系列等）
 
@@ -109,11 +109,13 @@ response = client.completion(
 | --- | --- | --- |
 | 地址 | `api_base`、`endpoint` | `AZURE_ANTHROPIC_API_BASE`、`AZURE_ANTHROPIC_ENDPOINT` |
 | API key | `api_key` | 不传时由 anthropic SDK 的 `AnthropicFoundry` 读取 `ANTHROPIC_FOUNDRY_API_KEY` |
+| API 版本 | `anthropic_version` | `AZURE_ANTHROPIC_VERSION`，都没有时用 `2023-06-01` |
 
 - 依赖 `anthropic` 与 `azure-identity`。
+- 模型名去掉 `azure/` 前缀后作为部署名，`azure/claude-sonnet-4-5` 与 `claude-sonnet-4-5` 等价。
 - 采样参数与推理的规则与 `anthropic` 相同。
 - 未传 `max_tokens` 时默认 30000。这个值下 SDK 会拒绝非流式请求、要求改用流式，所以非流式调用请显式传 `max_tokens`。
-- 没有固定 `anthropic-version`。在 anthropic 2.x 下会使用 API 版本 `2026-10-21`，该版本拒绝采样参数，这一组合尚未用真实请求验证。
+- 固定发送 `anthropic-version: 2023-06-01`，不随 anthropic SDK 的默认值变化（2.x 默认 `2026-10-21`，该版本拒绝采样参数）。Azure Foundry 两个版本都接受；设为 `2026-10-21` 或更新时，采样参数会被丢弃。
 
 ## OpenAI 兼容服务商
 

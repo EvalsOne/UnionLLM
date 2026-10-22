@@ -8,7 +8,7 @@
 | --- | --- | --- |
 | 只用国内 provider、Agent 平台，或 `openai`、`anthropic`、`gemini`、`deepseek` | 基本不受影响 | 升级即可。注意下文的 [SDK 版本](#sdk-版本)。 |
 | `provider="azure"` 调用 GPT、o 系列等非 Claude 模型 | 受影响 | 不再经过 LiteLLM，见 [Azure OpenAI](#azure-openai)。 |
-| `provider="azure"` 调用 Claude | 行为有变化 | 采样参数规则变了，见 [Claude 的采样参数](#claude-的采样参数)。 |
+| `provider="azure"` 调用 Claude | 行为有变化 | 路由与 API 版本见 [Azure Claude](#azure-claude)，采样参数见 [Claude 的采样参数](#claude-的采样参数)。 |
 | `provider` 为 `xai`、`openrouter`、`groq` | 受影响 | 不再经过 LiteLLM，见 [OpenAI 兼容服务商](#openai-兼容服务商)。 |
 | 不传 `provider`，传 `custom_llm_provider="openai"` 和 `api_base` | 受影响 | 同上。 |
 | `bedrock`、`vertex_ai`、`mistral`、`ollama` 等 LiteLLM 路由，或不传 `provider`、直接用 LiteLLM 模型名 | 受影响 | 安装 `unionllm[litellm]`，见 [仍需 LiteLLM 的路由](#仍需-litellm-的路由)。 |
@@ -28,7 +28,7 @@ python -m pip install -U "unionllm[litellm]"
 
 ## SDK 版本
 
-0.3.0 不再锁定 openai 与 anthropic 的大版本。下列组合已在 Python 3.10–3.13 下跑通仓库测试（测试使用模拟的上游响应）：
+0.3.0 不再锁定 openai 与 anthropic 的大版本。下列组合已在 Python 3.10–3.13 下跑通仓库测试（测试使用模拟的上游响应）；Azure Claude 另外在这三组版本下用真实请求验证过：
 
 | openai | anthropic | 说明 |
 | --- | --- | --- |
@@ -38,7 +38,7 @@ python -m pip install -U "unionllm[litellm]"
 
 openai 3 与 anthropic 1 起，SDK 的 HTTP 层从 `httpx` 换成了 `httpx2`。只给 UnionLLM 传普通参数（`api_key`、`api_base`、`timeout` 等）时无需改动；如果你在测试里模拟 `httpx` 或用 `httpx` 做链路追踪，需要改为 `httpx2` 才能拦截到 SDK 的请求。
 
-anthropic 2.x 默认使用 API 版本 `2026-10-21`，该版本会拒绝 `temperature`、`top_p`、`top_k`。UnionLLM 的原生 `anthropic` 分支固定发送 `anthropic-version: 2023-06-01`，不受影响；Azure Claude 分支没有固定版本，见[已知问题](#已知问题)。另外，anthropic 2.x 把 API key 放在 `Authorization: Bearer` 请求头里发送，如果 `ANTHROPIC_BASE_URL` 指向只读取 `x-api-key` 的代理，需要相应调整代理。
+anthropic 2.x 默认使用 API 版本 `2026-10-21`，该版本会拒绝 `temperature`、`top_p`、`top_k`。UnionLLM 的原生 `anthropic` 分支与 Azure Claude 分支都固定发送 `anthropic-version: 2023-06-01`，不受影响。另外，anthropic 2.x 把 API key 放在 `Authorization: Bearer` 请求头里发送，如果 `ANTHROPIC_BASE_URL` 指向只读取 `x-api-key` 的代理，需要相应调整代理。
 
 ## Azure OpenAI
 
@@ -76,6 +76,21 @@ LiteLLM 使用的 `AZURE_API_*` 环境变量仍然有效，原来的配置一般
 
 旧的类名 `AzureAIProvider` 仍保留，现在是 `AzureOpenAIProvider` 的别名。
 
+## Azure Claude
+
+**分支选择。** `provider="azure"` 改为按每次调用的模型选择分支：模型名去掉 `azure/` 前缀后以 `claude` 开头的走 Azure Claude（Anthropic Foundry），其余走 Azure OpenAI。0.2.x 只看构造 `UnionLLM` 时的 `model`，所以 `unionchat` 和带 `azure/` 前缀的模型名都进不了 Claude 分支；现在下面几种写法都能调用 Azure Claude：
+
+```python
+unionchat(provider="azure", model="azure/claude-sonnet-4-5", messages=messages, api_key=..., api_base=...)
+
+client = UnionLLM(provider="azure", api_key=..., api_base=...)
+client.completion(model="claude-sonnet-4-5", messages=messages)
+```
+
+构造时传了 `model`，会立即创建对应分支的客户端，与 0.2.x 相同；没传时在第一次 `completion()` 时创建，缺少 API key 或地址的错误也在那时抛出。两个分支的客户端各创建一次并复用，都使用构造时的配置。
+
+**API 版本。** Azure Claude 固定发送 `anthropic-version: 2023-06-01`，可用参数 `anthropic_version` 或环境变量 `AZURE_ANTHROPIC_VERSION` 改。0.2.x 使用 anthropic SDK 的默认版本，在 anthropic 2.x 下就是 `2026-10-21`；该版本对任何采样参数都返回 400，还会拒绝 assistant 消息里的 document 块和 user 消息里带 citations 的 text 块。如果你自己把版本设为 `2026-10-21` 或更新，UnionLLM 不再发送采样参数。
+
 ## OpenAI 兼容服务商
 
 `xai`、`openrouter`、`groq` 与自定义端点改由 `OpenAICompatibleProvider` 调用：
@@ -101,6 +116,7 @@ LiteLLM 使用的 `AZURE_API_*` 环境变量仍然有效，原来的配置一般
 - `temperature`、`top_p`、`top_k` 改为放进 `extra_body` 发送（anthropic 1.x 的 `messages.create` 已删除这三个关键字参数）。
 - 开启推理（`thinking` 或 `reasoning_effort`）时，这三个参数会被丢弃；开启推理时也不再强制设置 `temperature=1`。
 - 只接受默认采样的模型（Claude 5 系列，包括 Haiku 5.5，以及 Claude Opus 4.7 / 4.8）上，这三个参数总是被丢弃。这些模型的 `reasoning_effort` 会映射为 Adaptive Thinking 与 `output_config.effort`。
+- `anthropic-version` 设为 `2026-10-21` 或更新时，这三个参数也会被丢弃（该版本拒绝它们）。两个 Claude 分支默认都发送 `2023-06-01`。
 
 ## 仍需 LiteLLM 的路由
 
@@ -125,11 +141,6 @@ except LiteLLMUnavailableError as exc:
 它是 `ProviderError` 的子类，`status_code` 为 501。
 
 **LiteLLM 与 openai 3 的冲突。** LiteLLM 1.84 起声明 `openai<3`，1.83.1–1.83.8 把 openai 锁定在某个 2.x 版本。在已装 openai 3 的环境里安装 `unionllm[litellm]`，pip 可能把 openai 降回 2.x，也可能退回 1.83.0 或更早的 LiteLLM（这些版本没有声明 openai 上限，但未在 openai 3 下验证过）。需要 LiteLLM 路由时，建议使用 openai 2.x。
-
-## 已知问题
-
-- **Azure Claude 与 anthropic 2.x。** Azure Claude 分支没有固定 `anthropic-version`，在 anthropic 2.x 下会使用 API 版本 `2026-10-21`，该版本会拒绝采样参数。在这个组合下给 Azure Claude 传 `temperature` 等参数可能得到 400；这一组合尚未用真实请求验证。暂时可以继续使用 anthropic 1.x，或不传采样参数。
-- **`unionchat` 调用 Azure Claude 进不了 Claude 分支。** `unionchat` 不把 `model` 传给路由，`provider="azure"` 时总会选到 Azure OpenAI 分支。需要 Azure Claude 时，用 `UnionLLM(provider="azure", model="claude-...")` 构造客户端，模型名不要带 `azure/` 前缀。0.2.x 中同样存在这个问题。
 
 ## 升级检查清单
 

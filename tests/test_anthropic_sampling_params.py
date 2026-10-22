@@ -4,15 +4,19 @@ anthropic 1.x removed temperature/top_p/top_k from Messages.create, so passing
 one as a keyword is a TypeError before any request is sent. The fake clients in
 the other provider tests accept any keyword, so these tests go through real SDK
 clients (Anthropic and AnthropicFoundry) over a mock transport and check the
-JSON the SDK actually sends. They pass on anthropic 0.x and 1.x.
+JSON and headers the SDK actually sends. They pass on anthropic 0.x, 1.x and 2.x.
+
+anthropic 2.x sends API version 2026-10-21 by default, which rejects every
+sampling parameter; both providers pin 2023-06-01, so the version header is
+checked too.
 """
 
 import importlib
 import json
+from unittest.mock import patch
 
 import anthropic
 import pytest
-from anthropic import Anthropic, AnthropicFoundry
 
 from unionllm.providers.anthropic import AnthropicAIProvider, place_sampling_params
 from unionllm.providers.azure import AzureAnthropicProvider
@@ -46,10 +50,12 @@ def _sse(model):
     return "".join(f"event: {e['type']}\ndata: {json.dumps(e)}\n\n" for e in events)
 
 
-def _mock_http(sent):
+def _mock_http(sent, seen=None):
     def handle(request):
         body = json.loads(request.content)
         sent.append(body)
+        if seen is not None:
+            seen.append(request)
         if body.get("stream"):
             return http.Response(200, text=_sse(body["model"]), headers={"content-type": "text/event-stream"})
         return http.Response(200, json=_message(body["model"]))
@@ -57,24 +63,25 @@ def _mock_http(sent):
     return http.Client(transport=http.MockTransport(handle))
 
 
-def _anthropic_provider(sent):
-    provider = AnthropicAIProvider(api_key="mock-only")
-    provider.client = Anthropic(api_key="mock-only", base_url="https://mock.local", http_client=_mock_http(sent))
-    return provider
+def on_mock_transport(client_class, sent, seen=None):
+    """A stand-in for an SDK client class that builds the real client on the mock transport,
+    so that the provider's own __init__ (and the headers it sets) is what runs."""
+    return lambda **kwargs: client_class(http_client=_mock_http(sent, seen), **kwargs)
 
 
-def _azure_provider(sent):
-    # Skip __init__: the real one is fine, but this keeps the Foundry client on the mock transport.
-    provider = AzureAnthropicProvider.__new__(AzureAnthropicProvider)
-    provider.client = AnthropicFoundry(
-        api_key="mock-only", base_url="https://mock.local/anthropic", http_client=_mock_http(sent),
-    )
-    return provider
+def _anthropic_provider(sent, seen=None, **kwargs):
+    with patch("anthropic.Anthropic", on_mock_transport(anthropic.Anthropic, sent, seen)):
+        return AnthropicAIProvider(api_key="mock-only", base_url="https://mock.local", **kwargs)
 
 
-def _send(make_provider, model, stream, **kwargs):
+def _azure_provider(sent, seen=None, **kwargs):
+    with patch("anthropic.AnthropicFoundry", on_mock_transport(anthropic.AnthropicFoundry, sent, seen)):
+        return AzureAnthropicProvider(api_key="mock-only", api_base="https://mock.local/anthropic", **kwargs)
+
+
+def _send(make_provider, model, stream, provider_kwargs=None, seen=None, **kwargs):
     sent = []
-    provider = make_provider(sent)
+    provider = make_provider(sent, seen, **(provider_kwargs or {}))
     # Explicit max_tokens: Azure's 30000 default makes the SDK refuse a
     # non-streaming request ("Streaming is required ...").
     kwargs.setdefault("max_tokens", 2048)
@@ -136,6 +143,55 @@ def test_place_sampling_params_rules():
         assert place_sampling_params({"top_p": 0.9}, model) == {}
     # Nothing to move: params unchanged, no empty extra_body.
     assert place_sampling_params({"max_tokens": 10}, "claude-sonnet-4-5") == {"max_tokens": 10}
+
+
+@PROVIDERS
+@STREAM
+def test_requests_pin_api_version_2023_06_01(make_provider, stream, monkeypatch):
+    # Whatever the SDK's own default (2026-10-21 on anthropic 2.x), so temperature still works.
+    for name in ("ANTHROPIC_VERSION", "AZURE_ANTHROPIC_VERSION"):
+        monkeypatch.delenv(name, raising=False)
+    seen = []
+    body = _send(make_provider, "claude-sonnet-4-5", stream, seen=seen, temperature=0.3)
+    assert seen[0].headers["anthropic-version"] == "2023-06-01"
+    assert body["temperature"] == 0.3
+
+
+@pytest.mark.parametrize(
+    "make_provider, env_name",
+    [(_anthropic_provider, "ANTHROPIC_VERSION"), (_azure_provider, "AZURE_ANTHROPIC_VERSION")],
+    ids=["anthropic", "azure"],
+)
+@pytest.mark.parametrize("via", ["kwarg", "env"])
+def test_api_version_override_drops_sampling_from_2026_10_21(make_provider, env_name, via, monkeypatch):
+    monkeypatch.delenv(env_name, raising=False)
+    provider_kwargs = {}
+    if via == "kwarg":
+        provider_kwargs["anthropic_version"] = "2026-10-21"
+    else:
+        monkeypatch.setenv(env_name, "2026-10-21")
+    seen = []
+    body = _send(make_provider, "claude-sonnet-4-5", False, provider_kwargs=provider_kwargs, seen=seen,
+                 temperature=0.3, top_p=0.9)
+    assert seen[0].headers["anthropic-version"] == "2026-10-21"
+    assert not {"temperature", "top_p", "top_k"} & body.keys()
+
+
+@STREAM
+def test_azure_prefixed_model_sends_deployment_name(stream):
+    seen = []
+    body = _send(_azure_provider, "azure/claude-sonnet-4-5", stream, seen=seen, temperature=0.3)
+    assert body["model"] == "claude-sonnet-4-5"
+    assert body["temperature"] == 0.3
+    assert seen[0].url.path == "/anthropic/v1/messages"
+
+
+def test_place_sampling_params_by_api_version():
+    params = {"temperature": 0.3, "top_k": 40}
+    assert place_sampling_params(dict(params), "claude-sonnet-4-5", "2023-06-01") == {"extra_body": params}
+    assert place_sampling_params(dict(params), "claude-sonnet-4-5", None) == {"extra_body": params}
+    for version in ("2026-10-21", "2027-01-01"):
+        assert place_sampling_params(dict(params), "claude-sonnet-4-5", version) == {}
 
 
 def test_4_6_and_older_keep_budget_thinking():

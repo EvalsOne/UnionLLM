@@ -59,7 +59,7 @@ response = client.completion(
 
 调用时的参数会与构造时的参数一起交给适配器，但各适配器的覆盖规则不完全一致。`openai`、`azure`（非 Claude）与 OpenAI 兼容服务商允许在调用时用 `api_key`、`api_base` / `base_url` 覆盖构造时的配置。
 
-部分路由在构造时就要看 `model`，例如 `azure` 按模型名选择 Claude 或 Azure OpenAI 分支。这种情况下请把 `model` 也传给 `UnionLLM(...)`，见 [Provider 矩阵](providers.md#azure)。
+`azure` 按每次调用的模型选择 Claude 或 Azure OpenAI 分支，构造时可以不传 `model`，见 [Provider 矩阵](providers.md#azure)。`qwen` 仍在构造时按 `model` 选择接口，调用 `qwen` 时请把 `model` 也传给 `UnionLLM(...)`。
 
 ## 流式响应
 

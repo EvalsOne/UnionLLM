@@ -12,13 +12,12 @@
 | LiteLLM 改为可选依赖，Azure OpenAI 与 OpenAI 兼容服务商改用 openai SDK；支持 openai 3.x 与 anthropic 1.x。 | 0.3.0 |
 | 新增 CHANGELOG、0.3.0 迁移指南与可直接运行的示例；README 同时作为 PyPI 项目说明（此前 PyPI 页面没有项目说明）。 | 0.3.0 |
 | 新增 `requirements-dev.txt`，测试所需的 `python-dotenv` 不再缺失；在 Python 3.10–3.13、openai 2.x/3.x、anthropic 0.x/1.x/2.x 下跑通测试。 | 0.3.0 |
+| `provider="azure"` 改为按每次调用的模型选择分支，并去掉 `azure/` 前缀后判断 Claude，`unionchat` 与带前缀的模型名都能调用 Azure Claude；Azure Claude 固定 `anthropic-version: 2023-06-01`，API 版本为 `2026-10-21` 或更新时不再发送采样参数。补了模拟测试，并在 anthropic 0.x/1.x/2.x 下用真实请求验证。 | 0.3.0 |
 
 ## 待处理：代码问题
 
 | 问题 | 影响 | 建议 |
 | --- | --- | --- |
-| `unionchat` 不把 `model` 传给路由。`provider="azure"` 依赖 `model` 选择 Claude 分支，经 `unionchat` 调用 Azure Claude 时总会进入 Azure OpenAI 分支；模型名带 `azure/` 前缀时同样进不了 Claude 分支。 | Azure Claude 只能用 `UnionLLM(provider="azure", model="claude-...")` 调用。 | `unionchat` 把 `model` 一并传给 `UnionLLM`，Claude 判断时去掉 `azure/` 前缀，并补测试。 |
-| Azure Claude 分支没有固定 `anthropic-version`。anthropic 2.x 默认使用 API 版本 `2026-10-21`，该版本拒绝 `temperature`、`top_p`、`top_k`。 | anthropic 2.x 下给 Azure Claude 传采样参数可能得到 400，尚未用真实请求验证。 | 像原生 `anthropic` 分支一样固定 `2023-06-01`，或在 2.x 下不再发送采样参数；先用真实请求确认 Azure 支持的 API 版本。 |
 | Coze、Dify、FastGPT 适配器会构造 `context`，但 `ModelResponse` 只保留 `conversation_id`。 | 调用方拿不到知识库上下文，也没有回归测试。 | 决定是否公开 `context`：要支持就扩展响应模型并补测试，不支持就删掉适配器里的无用字段。 |
 | `acompletion` 只是把同步调用放进线程池，`unionchat` 没有异步版本。 | 异步语义不清楚，流式时返回的仍是同步迭代器。 | 明确支持范围；要么实现原生异步，要么在下一个不兼容版本中标为实验性。 |
 | 参数过滤和能力支持分散在各 provider 中。 | 调用方不知道某个参数会被忽略、改写还是报错。 | 建立声明式的 provider 能力与参数表，让代码和文档从同一来源生成。 |
@@ -38,7 +37,6 @@
 ## 建议顺序
 
 ```text
-发布 0.3.0 前   修复 unionchat 的 Azure 路由 → 处理 Azure Claude 与 anthropic 2.x → 真实调用验证
 发布之后        CI 与发布流程 → 补齐老 provider 的测试 → provider 能力表
 长期            异步策略 → Agent 平台 context → 社区文件
 ```

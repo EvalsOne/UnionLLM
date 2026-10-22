@@ -90,13 +90,13 @@ class UnionLLM:
             else:
                 self.provider_instance = anthropic.AnthropicAIProvider(**kwargs)
         elif self.provider == "azure":
+            # Claude 部署走 Azure 原生（Anthropic Foundry），其余模型（GPT、o 系列等）走
+            # openai SDK 的 AzureOpenAI。按每次调用的模型选择：unionchat 等调用方构造
+            # UnionLLM(provider="azure") 时不带 model，只在 completion() 里给出。
+            self._azure_kwargs = kwargs
+            self._azure_instances = {}
             model = kwargs.get("model")
-            # 对于 Claude 系列，使用 Azure 原生（Anthropic Foundry）调用
-            if model is not None and str(model).lower().startswith("claude"):
-                self.provider_instance = azure.AzureAnthropicProvider(**kwargs)
-            else:
-                # 其余模型（GPT、o 系列等）走 openai SDK 的 AzureOpenAI
-                self.provider_instance = azure.AzureOpenAIProvider(**kwargs)
+            self.provider_instance = self._azure_instance(model) if model else None
         elif self.provider == "openai":
             self.provider_instance = openai_native.OpenAINativeProvider(**kwargs)
         elif self.provider in OPENAI_COMPATIBLE_PROVIDERS:
@@ -126,7 +126,18 @@ class UnionLLM:
         else:
             self.provider_instance = _litellm_provider(None, **kwargs)
 
+    def _azure_instance(self, model: Optional[str]):
+        """The Azure provider for this model (Claude or not), built once per kind
+        from the constructor's arguments."""
+        claude = azure.is_claude_deployment(model)
+        if claude not in self._azure_instances:
+            provider_class = azure.AzureAnthropicProvider if claude else azure.AzureOpenAIProvider
+            self._azure_instances[claude] = provider_class(**self._azure_kwargs)
+        return self._azure_instances[claude]
+
     def completion(self, model: str, messages: List[str], **kwargs) -> Any:
+        if self.provider == "azure":
+            return self._azure_instance(model).completion(model, messages, **kwargs)
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
         if self.litellm_call_type:
@@ -142,9 +153,12 @@ class UnionLLM:
         
     async def acompletion(self, model: str, messages: List[str], **kwargs) -> Any:
         loop = asyncio.get_event_loop()
+        if self.provider == "azure":
+            func = partial(self._azure_instance(model).completion, model, messages, **kwargs)
+            return await loop.run_in_executor(None, func)
         if not self.provider_instance:
             raise ProviderError(f"Provider '{self.provider}' is not initialized.")
-        
+
         if self.litellm_call_type:
             if self.litellm_call_type == 1:
                 if not model.startswith(self.provider + "/"):

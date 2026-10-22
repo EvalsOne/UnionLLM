@@ -8,7 +8,7 @@ from urllib.parse import urlparse, urlunparse
 
 from openai import AzureOpenAI, OpenAI
 
-from .anthropic import place_sampling_params
+from .anthropic import DEFAULT_ANTHROPIC_VERSION, place_sampling_params
 from .base_provider import BaseProvider
 from .openai_native import OpenAINativeError, OpenAINativeProvider
 from unionllm.utils import ModelResponse, Message, Choices, Usage, Delta, StreamingChoices
@@ -19,6 +19,19 @@ class AzureProviderError(Exception):
         self.status_code = status_code
         self.message = message
         super().__init__(self.message)
+
+
+def deployment_name(model: Optional[str]) -> str:
+    """The Azure deployment name: the model name without LiteLLM's "azure/" prefix."""
+    name = str(model or "")
+    if name.lower().startswith("azure/"):
+        return name.split("/", 1)[1]
+    return name
+
+
+def is_claude_deployment(model: Optional[str]) -> bool:
+    """Whether the model is a Claude deployment, served by Anthropic Foundry."""
+    return deployment_name(model).lower().startswith("claude")
 
 
 class AzureOpenAIProvider(OpenAINativeProvider):
@@ -111,12 +124,7 @@ class AzureOpenAIProvider(OpenAINativeProvider):
             return self.client
         return self._build_client(api_key, base_url, api_version)
 
-    @staticmethod
-    def deployment_name(model: str) -> str:
-        name = str(model or "")
-        if name.lower().startswith("azure/"):
-            return name.split("/", 1)[1]
-        return name
+    deployment_name = staticmethod(deployment_name)
 
     @classmethod
     def model_family(cls, model: str) -> str:
@@ -212,12 +220,21 @@ class AzureAnthropicProvider(BaseProvider):
     - Uses DefaultAzureCredential and AAD bearer token scope
       "https://cognitiveservices.azure.com/.default".
 
+    API version:
+    - Sends `anthropic-version: 2023-06-01`, as AnthropicAIProvider does, so that
+      every anthropic SDK version gets the same API: 2.x would default to
+      2026-10-21, which rejects temperature/top_p/top_k. Override with kwarg
+      `anthropic_version` or env `AZURE_ANTHROPIC_VERSION`.
+
     Usage:
         provider = AzureAnthropicProvider(endpoint="https://.../anthropic")
         provider.completion(model="<deployment_name>", messages=[...])
+
+    The model name may carry LiteLLM's "azure/" prefix; the deployment is the rest.
     """
 
     SCOPE = "https://cognitiveservices.azure.com/.default"
+    DEFAULT_ANTHROPIC_VERSION = DEFAULT_ANTHROPIC_VERSION
 
     def __init__(self, **kwargs):
         try:
@@ -249,9 +266,18 @@ class AzureAnthropicProvider(BaseProvider):
             )
 
         api_key = kwargs.get("api_key")
+        self.anthropic_version = (
+            kwargs.get("anthropic_version")
+            or os.getenv("AZURE_ANTHROPIC_VERSION")
+            or self.DEFAULT_ANTHROPIC_VERSION
+        )
 
         # Create AnthropicFoundry client
-        self.client = AnthropicFoundry(api_key=api_key, base_url=api_base)
+        self.client = AnthropicFoundry(
+            api_key=api_key,
+            base_url=api_base,
+            default_headers={"anthropic-version": self.anthropic_version},
+        )
 
     def _preprocess(self, model: Optional[str] = None, **kwargs) -> Dict[str, Any]:
         # Keep only commonly-supported params for Claude messages.create
@@ -301,7 +327,7 @@ class AzureAnthropicProvider(BaseProvider):
             }
             clean.pop("reasoning_effort", None)
 
-        return place_sampling_params(clean, model)
+        return place_sampling_params(clean, model, getattr(self, "anthropic_version", None))
 
     def _convert_openai_to_anthropic_messages(self, messages: List[dict]) -> tuple[Optional[str], List[dict]]:
         """
@@ -1061,6 +1087,7 @@ class AzureAnthropicProvider(BaseProvider):
                 yield model_response
 
     def completion(self, model: str, messages: List[dict], **kwargs) -> ModelResponse:
+        model = deployment_name(model)
         if not model or messages is None:
             raise AzureProviderError(status_code=422, message="Missing model or messages")
 

@@ -91,10 +91,10 @@ response = client.completion(
 | --- | --- |
 | Python | 3.10–3.13 |
 | openai | 2.x、3.x |
-| anthropic | 0.x、1.x、2.x（Azure Claude 在 2.x 下的采样参数尚未用真实请求验证，见[已知问题](https://github.com/EvalsOne/UnionLLM/blob/main/docs/migration-0.3.md#已知问题)） |
+| anthropic | 0.x、1.x、2.x |
 | litellm（可选） | `>=1.75,<1.95`，要求 openai 2.x |
 
-以上组合在仓库测试中验证，测试使用模拟的上游响应。
+以上组合在仓库测试中验证，测试使用模拟的上游响应；Azure Claude 另外在 anthropic 0.x、1.x、2.x 下用真实请求验证过。
 
 ## 文档
 
