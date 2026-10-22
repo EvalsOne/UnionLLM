@@ -25,7 +25,9 @@ LiteLLM 是可选依赖（`unionllm[litellm]`），只在选中 LiteLLM 分支�
 | `unionllm/exceptions.py` | 顶层异常。 |
 | `tests/` | 当前已覆盖的回归测试，主要集中在近期原生适配器。 |
 | `docs/` | 面向使用者与贡献者的文档。 |
-| `examples/` | 最小可运行示例；当前内容尚待补齐，详见开源改进计划。 |
+| `examples/` | 只依赖环境变量的最小示例。 |
+| `CHANGELOG.md` | 每个版本的使用者可见变化。 |
+| `requirements-dev.txt` | 运行测试所需的额外依赖。 |
 
 `cookbook/`、`tests/my/`、构建产物与缓存均被忽略，不属于发布源代码或稳定文档。
 
@@ -41,7 +43,7 @@ LiteLLM 是可选依赖（`unionllm[litellm]`），只在选中 LiteLLM 分支�
 
 - `openai` 总是选择 `OpenAINativeProvider`。
 - `anthropic` 默认选择 `AnthropicAIProvider`，但 `use_litellm_anthropic` 或环境变量可切至 LiteLLM。
-- `azure` 的模型名以 `claude` 开头时选择 `AzureAnthropicProvider`；其他模型选择 `AzureOpenAIProvider`（openai SDK 的 `AzureOpenAI`）。
+- `azure` 的模型名以 `claude` 开头时选择 `AzureAnthropicProvider`；其他模型选择 `AzureOpenAIProvider`（openai SDK 的 `AzureOpenAI`）。判断用的是构造 `UnionLLM` 时传入的 `model`；`unionchat` 不把 `model` 交给路由，所以经 `unionchat` 调用时总会选到 `AzureOpenAIProvider`。
 - `qwen` 默认使用 DashScope；只有代码中的保留模型名 `qwen-special-model` 走 DashScope 的 OpenAI-compatible 接口。
 - `xai`、`openrouter`、`groq` 选择 `OpenAICompatibleProvider`，使用各自的默认地址与环境变量密钥。
 - 不传 `provider` 且 `custom_llm_provider="openai"` 时选择 `OpenAICompatibleProvider`，原样使用调用方的 `api_base` / `base_url`。

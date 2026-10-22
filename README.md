@@ -1,17 +1,38 @@
 # UnionLLM
 
-一个以统一 `model` / `messages` 调用面连接多家 LLM、Agent 应用和 LiteLLM provider 的 Python 库。它的职责是路由请求、适配部分请求/响应格式，并尽可能返回统一的 OpenAI 风格 `ModelResponse`；它不是一个 OpenAI HTTP 代理服务。
+用一套 OpenAI 风格的 `model` / `messages` 调用方式，访问国内外的大模型和 Agent 平台的 Python 库。
 
-本文档以仓库中的运行代码和测试为事实来源；模型是否仍可用、配额和厂商参数以相应厂商的官方文档为准。
+UnionLLM 负责选择 provider、适配请求与响应格式，并尽量把结果统一成 OpenAI 风格的 `ModelResponse`。它是一个 Python 库，不是 HTTP 代理服务。
+
+> **0.3.0 起，LiteLLM 改为可选依赖。** Azure OpenAI、xAI、OpenRouter、Groq 和自定义 OpenAI 兼容端点改为直接用 openai SDK 调用，支持 openai 3.x 与 anthropic 1.x。从 0.2.x 升级前请阅读[迁移指南](https://github.com/EvalsOne/UnionLLM/blob/main/docs/migration-0.3.md)。
+
+## 特点
+
+- **一套调用方式**：`unionchat(provider=..., model=..., messages=...)`，流式与非流式都返回 OpenAI 风格的对象。
+- **国内模型直接适配**：智谱、Moonshot（Kimi）、通义千问、DeepSeek、豆包、文心、讯飞星火、MiniMax、百川、零一万物、阶跃星辰、天工。
+- **海外模型用官方 SDK**：OpenAI、Anthropic、Gemini、Azure OpenAI 与 Azure 上的 Claude。
+- **Agent 平台**：Coze、Dify、FastGPT。
+- **其他 provider 可选 LiteLLM**：Bedrock、Vertex AI、Mistral、Ollama 等，按需安装。
+
+## 安装
+
+```bash
+python -m pip install unionllm
+```
+
+需要 LiteLLM 路由时：
+
+```bash
+python -m pip install "unionllm[litellm]"
+```
+
+Python 要求 3.10–3.13。LiteLLM 要求 openai 2.x，详见[迁移指南](https://github.com/EvalsOne/UnionLLM/blob/main/docs/migration-0.3.md#仍需-litellm-的路由)。
 
 ## 快速开始
 
 ```bash
-python -m pip install unionllm
 export ZHIPU_API_KEY="..."
 ```
-
-自 0.3.0 起 LiteLLM 是可选依赖：只有 LiteLLM 路由需要它，用 `python -m pip install "unionllm[litellm]"` 安装。LiteLLM 仍要求 `openai<3`，因此不能与 openai 3.x 共存；未安装时这些路由会抛出 `LiteLLMUnavailableError`（`ProviderError` 的子类）。
 
 ```python
 from unionllm import unionchat
@@ -24,57 +45,81 @@ response = unionchat(
 print(response.choices[0].message.content)
 ```
 
-流式调用返回可迭代的统一 chunk：
+流式调用返回可迭代的 chunk：
 
 ```python
 for chunk in unionchat(
     provider="openai",
-    model="gpt-5.6-luna",
+    model="gpt-5.4-mini",
     messages=[{"role": "user", "content": "用一句话介绍 UnionLLM"}],
     stream=True,
 ):
-    delta = chunk.choices[0].delta
-    if getattr(delta, "content", None):
-        print(delta.content, end="")
+    if chunk.choices and getattr(chunk.choices[0].delta, "content", None):
+        print(chunk.choices[0].delta.content, end="")
 ```
 
-详细的安装、调用约定、流式响应与异常处理见[入门与调用约定](docs/getting-started.md)。
+需要复用配置时，使用 `UnionLLM` 客户端：
 
-## 当前支持范围
+```python
+from unionllm import UnionLLM
 
-| 路由类别 | provider 值 |
+client = UnionLLM(provider="deepseek")
+response = client.completion(
+    model="deepseek-chat",
+    messages=[{"role": "user", "content": "你好"}],
+)
+```
+
+调用约定、异步、流式与错误处理见[入门指南](https://github.com/EvalsOne/UnionLLM/blob/main/docs/getting-started.md)；更多示例见 [examples/](https://github.com/EvalsOne/UnionLLM/tree/main/examples)。
+
+## 支持范围
+
+| 类别 | `provider` 取值 | 实现 |
+| --- | --- | --- |
+| 国内模型 | `zhipuai`、`moonshot`、`qwen`、`deepseek`、`doubao`、`wenxin`、`xunfei`、`xunfei_http`、`minimax`、`baichuan`、`lingyi`、`stepfun`、`tiangong` | 各自的适配器 |
+| 海外模型 | `openai`、`anthropic`、`gemini` | 官方 SDK |
+| Azure | `azure` | Claude 走 `AnthropicFoundry`，其他模型走 openai SDK 的 `AzureOpenAI` |
+| OpenAI 兼容 | `xai`、`openrouter`、`groq`，以及 `custom_llm_provider="openai"` 加 `api_base` 的自定义端点 | openai SDK |
+| Agent 平台 | `coze`、`dify`、`fastgpt` | 各自的适配器 |
+| LiteLLM（可选） | `bedrock`、`vertex_ai`、`mistral`、`ollama`、`together_ai`、`perplexity`、`cohere` 等 | 需安装 `unionllm[litellm]` |
+
+“支持”不代表能力相同。多模态、工具调用、推理参数、缓存和流式 usage 都取决于具体适配器。每个 provider 的环境变量、默认地址和特有参数见 [Provider 矩阵](https://github.com/EvalsOne/UnionLLM/blob/main/docs/providers.md)。
+
+## 兼容性
+
+| 依赖 | 范围 |
 | --- | --- |
-| 原生/直接适配 | `zhipuai`、`moonshot`、`minimax`、`qwen`、`tiangong`、`baichuan`、`wenxin`、`xunfei`、`xunfei_http`、`dify`、`fastgpt`、`coze`、`lingyi`、`stepfun`、`doubao`、`deepseek`、`gemini`、`anthropic`、`openai` |
-| Azure | `azure`：Claude 模型走 Azure Anthropic 原生实现；其他模型（GPT、o 系列）走 openai SDK 的 `AzureOpenAI` |
-| OpenAI-compatible | `xai`、`openrouter`、`groq`，以及不传 `provider`、传 `custom_llm_provider="openai"` 与 `api_base` 的自定义端点：经 openai SDK 调用 |
-| LiteLLM 路由（可选） | `bedrock`、`ollama`、`mistral`、`vertex_ai` 等固定 allow-list；也可省略 `provider`，直接提供 LiteLLM 格式的 `model`。需安装 `unionllm[litellm]` |
+| Python | 3.10–3.13 |
+| openai | 2.x、3.x |
+| anthropic | 0.x、1.x、2.x（Azure Claude 在 2.x 下的采样参数尚未用真实请求验证，见[已知问题](https://github.com/EvalsOne/UnionLLM/blob/main/docs/migration-0.3.md#已知问题)） |
+| litellm（可选） | `>=1.75,<1.95`，要求 openai 2.x |
 
-不要把“支持”理解为所有 provider 具有相同能力。多模态、工具调用、推理参数、缓存、流式和上下文信息均取决于具体适配器。请先查看完整的[Provider 矩阵与配置](docs/providers.md)。
+以上组合在仓库测试中验证，测试使用模拟的上游响应。
 
-## 文档导航
+## 文档
 
-- [入门与调用约定](docs/getting-started.md)：安装、`unionchat`、`UnionLLM`、流式、响应和异常。
-- [Provider 矩阵与配置](docs/providers.md)：所有当前路由、环境变量、特殊参数和迁移说明。
-- [架构说明](docs/architecture.md)：真实请求路径、边界与目录责任。
-- [贡献指南](docs/contributing.md)：本地校验、provider 改动的最小交付面。
-- [项目治理与开源改进计划](docs/open-source-review.md)：本次整理的发现、优先级和阶段计划。
+- [入门指南](https://github.com/EvalsOne/UnionLLM/blob/main/docs/getting-started.md)：安装、`unionchat` 与 `UnionLLM`、流式、异步、响应与错误。
+- [Provider 矩阵](https://github.com/EvalsOne/UnionLLM/blob/main/docs/providers.md)：所有路由、环境变量、特有参数。
+- [从 0.2.x 迁移到 0.3.0](https://github.com/EvalsOne/UnionLLM/blob/main/docs/migration-0.3.md)：LiteLLM 改为可选后的变化与检查清单。
+- [架构说明](https://github.com/EvalsOne/UnionLLM/blob/main/docs/architecture.md)：请求路径、目录分工与统一层的边界。
+- [贡献指南](https://github.com/EvalsOne/UnionLLM/blob/main/docs/contributing.md)：本地测试与提交要求。
+- [变更日志](https://github.com/EvalsOne/UnionLLM/blob/main/CHANGELOG.md)
+- [项目治理与改进计划](https://github.com/EvalsOne/UnionLLM/blob/main/docs/open-source-review.md)
 
-历史 provider 页面仍保留为跳转页，避免外部链接失效；其中不再维护重复示例。
+## 边界
 
-## 项目状态与边界
-
-- 公开 API 只有 `unionchat` 与 `UnionLLM`；请求入口位于 `unionllm/main.py`。
-- `unionchat` 需要 `model` 和 OpenAI 风格的 `messages` 列表，其他关键字参数传给选中的 provider。
-- 若适配器不支持某个参数，可能过滤、映射或忽略它；不要假定任意 OpenAI 参数在所有 provider 上生效。
-- Agent 平台的 `model` 在目前实现中常是占位值；真正调用目标由应用/Bot 配置决定。
-- 本仓库不包含服务端、CLI、环境变量模板、发布流水线或文档站点。它是一个 Python library 仓库。
+- 公开 API 只有 `unionchat` 与 `UnionLLM`，入口在 `unionllm/main.py`。
+- 适配器不支持的参数可能被过滤、改写或忽略，不要假设任意 OpenAI 参数在所有 provider 上都生效。
+- Agent 平台的 `model` 只是占位值，实际调用什么由平台上的应用配置决定。
+- 本仓库只包含 Python 库，不包含服务端、命令行工具或文档站点。
 
 ## 贡献
 
-欢迎 issue 和 PR。提交前请阅读[贡献指南](docs/contributing.md)，并至少运行：
+欢迎提交 issue 和 PR。提交前请阅读[贡献指南](https://github.com/EvalsOne/UnionLLM/blob/main/docs/contributing.md)，并至少运行：
 
 ```bash
+python -m pip install -e . -r requirements-dev.txt
 python -m pytest --ignore=tests/my
 ```
 
-许可证为 [MIT](LICENSE)。
+许可证：[MIT](https://github.com/EvalsOne/UnionLLM/blob/main/LICENSE)。

@@ -1,48 +1,46 @@
-# 项目治理与开源改进计划
+# 项目治理与改进计划
 
-本次 review 的范围是已跟踪源代码、测试、打包配置和文档；没有修改任何 Python 代码。结论按优先级排列，未把未验证的产品猜测当作事实。
+本页记录对源代码、测试、打包配置和文档的审查结论，以及每一项的当前状态。2026-07 做过第一次审查；2026-10 准备发布 0.3.0 时更新了一次。
 
-## 已完成：文档信息架构
+## 已完成
 
-- README 改为项目入口，只保留真实公开 API、当前路由范围与明确边界。
-- 新增入门、provider 矩阵、架构说明和贡献指南；provider 专属环境变量、特殊路由和 Agent 平台差异集中在一个可维护位置。
-- 历史 provider 链接保留为跳转页，消除错别 provider、失效参数名等示例的继续传播。
-- 业务模型清单、价格、厂商 API 链接不再在仓库中重复维护；它们应由上游官方文档承担。
-- 已从当前版本移除根目录/测试目录的 `.DS_Store` 和 `dump.rdb`。后者曾是含任务元数据的 Redis RDB 运行文件；旧 Git 历史仍可能保留它，不能将本次删除视为历史清理。
-
-## P0：发布与安全卫生（建议优先处理）
-
-| 发现 | 证据 | 建议行动 | 完成标准 |
-| --- | --- | --- | --- |
-| 历史版本曾跟踪 `.DS_Store`、`tests/.DS_Store` 和 `dump.rdb`。 | `dump.rdb` 为含任务元数据的 Redis RDB 文件。当前分支已删除它们，且 `.gitignore` 已覆盖。 | 若公开历史含敏感数据，执行经协调的历史重写与缓存清理。 | 克隆当前分支无本机元数据、缓存或潜在运行数据；公开历史的敏感 blob 已按流程处置。 |
-| 依赖完全未锁定且 `pyproject.toml` 的 Python 版本为 `*`。 | 两份依赖声明均使用通配版本。 | 设定支持的 Python 范围、核心依赖下限，并生成锁文件或明确 constraints 策略。 | 干净环境可重复安装，支持矩阵写入 CI。 |
-| 没有已跟踪的 CI、发布或安全披露配置。 | 根目录没有 GitHub Actions、`SECURITY.md`、贡献/发布流程。 | 添加 CI、`SECURITY.md`、发布检查清单和 PyPI trusted publishing 方案。 | PR 自动跑测试；安全报告与发布责任人明确。 |
-
-## P1：库契约与质量
-
-| 发现 | 风险 | 建议行动 |
-| --- | --- | --- |
-| 参数过滤和能力支持散落在 provider 中，文档无法承诺统一参数集。 | 调用方不知道参数被忽略、映射还是报错。 | 建立声明式 provider capability/parameter matrix，运行时代码与文档从同一来源生成。 |
-| Coze、Dify、FastGPT 会把 `context` 传给 `ModelResponse`，但构造器当前只转发 `conversation_id`。 | README 过去承诺的 RAG context 在统一响应上不可依赖，且缺少回归测试。 | 明确是否要公开 `context`：若要支持，扩展响应模型并为流式/非流式建立测试；若不支持，移除适配器中的死字段。 |
-| `pytest.ini` 会递归收集被忽略的 `tests/my/`；该目录中的测试会调用真实外部服务。 | 同一条 `python -m pytest` 会因应用状态、密钥或网络而失败，不能作为可重复的质量门槛。 | 将真实服务测试移至明确的 integration 目录并用 marker/环境开关隔离；在 CI 只运行受控 mock 测试。文档暂以 `--ignore=tests/my` 标明稳定命令。 |
-| `acompletion` 有公开方法但目前只覆盖部分 LiteLLM 分支，且多数适配器通过线程池包装同步调用。 | 异步语义和覆盖范围不清晰。 | 明确支持列表；补全所有分支或在下个破坏性版本移除/标记实验性。 |
-| 测试集中在近期 OpenAI、Anthropic、Gemini、Moonshot 和少数回归；多数老 provider 没有已跟踪单元测试。 | 修改旧 provider 容易无回归保护。 | 为每个路由至少建立无密钥 mock 冒烟测试和标准化响应/错误测试。 |
-| `examples/example_usage.py` 只有导入，没有可执行示例。 | 新用户无法通过仓库验证最小成功路径。 | 增加只依赖环境变量的最小 chat 与 streaming 示例，并在 CI 中做语法检查。 |
-
-## P2：仓库结构与维护体验
-
-| 发现 | 建议行动 |
+| 项目 | 完成于 |
 | --- | --- |
-| 存在未跟踪且被忽略的 `cookbook/`、`tests/my/`、`dist/` 和 `.prd-autopilot/`。 | 明确哪些是开发者私有材料，哪些是需要迁入受版本控制目录的公共资产；不要让可复现知识只存在于忽略目录。 |
-| 文档此前按 provider 各自复制，导致新路由缺页、旧参数难以同步。 | 保持新的“一个矩阵 + 兼容跳转页”结构；后续 provider 改动以矩阵为必改项。 |
-| 缺少 issue/PR 模板、行为准则和变更日志。 | 在社区开始接收外部贡献前补上社区治理文件，并采用 Keep a Changelog 或 release notes。 |
+| 文档改为“README + 入门指南 + Provider 矩阵 + 架构说明 + 贡献指南”的结构；按 provider 拆分的旧页面保留为跳转页。 | 2026-07 |
+| 从当前版本移除被跟踪的 `.DS_Store` 与 `dump.rdb`（后者是含任务元数据的 Redis 运行文件）。旧的 Git 历史中仍可能保留它们。 | 2026-07 |
+| Python 版本要求从 `*` 改为 `>=3.10,<3.14`。 | 0.2.14 |
+| LiteLLM 改为可选依赖，Azure OpenAI 与 OpenAI 兼容服务商改用 openai SDK；支持 openai 3.x 与 anthropic 1.x。 | 0.3.0 |
+| 新增 CHANGELOG、0.3.0 迁移指南与可直接运行的示例；README 同时作为 PyPI 项目说明（此前 PyPI 页面没有项目说明）。 | 0.3.0 |
+| 新增 `requirements-dev.txt`，测试所需的 `python-dotenv` 不再缺失；在 Python 3.10–3.13、openai 2.x/3.x、anthropic 0.x/1.x/2.x 下跑通测试。 | 0.3.0 |
 
-## 建议执行顺序
+## 待处理：代码问题
+
+| 问题 | 影响 | 建议 |
+| --- | --- | --- |
+| `unionchat` 不把 `model` 传给路由。`provider="azure"` 依赖 `model` 选择 Claude 分支，经 `unionchat` 调用 Azure Claude 时总会进入 Azure OpenAI 分支；模型名带 `azure/` 前缀时同样进不了 Claude 分支。 | Azure Claude 只能用 `UnionLLM(provider="azure", model="claude-...")` 调用。 | `unionchat` 把 `model` 一并传给 `UnionLLM`，Claude 判断时去掉 `azure/` 前缀，并补测试。 |
+| Azure Claude 分支没有固定 `anthropic-version`。anthropic 2.x 默认使用 API 版本 `2026-10-21`，该版本拒绝 `temperature`、`top_p`、`top_k`。 | anthropic 2.x 下给 Azure Claude 传采样参数可能得到 400，尚未用真实请求验证。 | 像原生 `anthropic` 分支一样固定 `2023-06-01`，或在 2.x 下不再发送采样参数；先用真实请求确认 Azure 支持的 API 版本。 |
+| Coze、Dify、FastGPT 适配器会构造 `context`，但 `ModelResponse` 只保留 `conversation_id`。 | 调用方拿不到知识库上下文，也没有回归测试。 | 决定是否公开 `context`：要支持就扩展响应模型并补测试，不支持就删掉适配器里的无用字段。 |
+| `acompletion` 只是把同步调用放进线程池，`unionchat` 没有异步版本。 | 异步语义不清楚，流式时返回的仍是同步迭代器。 | 明确支持范围；要么实现原生异步，要么在下一个不兼容版本中标为实验性。 |
+| 参数过滤和能力支持分散在各 provider 中。 | 调用方不知道某个参数会被忽略、改写还是报错。 | 建立声明式的 provider 能力与参数表，让代码和文档从同一来源生成。 |
+| 测试集中在 OpenAI、Anthropic、Azure、Gemini、Moonshot、DeepSeek、智谱与 OpenAI 兼容路由，其他老 provider 没有单元测试。 | 修改老 provider 时没有回归保护。 | 为每个路由至少补一个无密钥的模拟测试，覆盖响应与错误的统一形状。 |
+
+## 待处理：发布与维护
+
+| 问题 | 建议 |
+| --- | --- |
+| 没有 CI、发布流水线、`SECURITY.md`、issue/PR 模板和行为准则。 | 加上 GitHub Actions：按 Python 3.10–3.13 与新旧 SDK 版本跑测试，并检查 README 能否在 PyPI 上渲染；配置 PyPI trusted publishing；补齐社区文件。 |
+| 仓库没有版本标签，PyPI 上部分版本（如 0.2.2、0.2.3、0.2.10）找不到对应的版本提交。 | 从 0.3.0 起，每次发布都给发布提交打 `vX.Y.Z` 标签。 |
+| 核心依赖没有下限，也没有锁文件。 | 在 `pyproject.toml` 中写上已验证的最低版本，CI 中同时测试最低版本与最新版本。 |
+| `pytest.ini` 会递归收集被忽略的 `tests/my/`，其中的测试调用真实外部服务。 | 把真实服务测试移到单独的 integration 目录，用 marker 或环境变量开关隔离；目前文档统一使用 `--ignore=tests/my`。 |
+| 旧 Git 历史中可能仍有 `dump.rdb`。 | 如果其中有敏感数据，协调后重写公开历史并清理缓存。 |
+| `cookbook/`、`tests/my/` 等被忽略的目录只存在于本地。 | 区分私有材料与应当公开的内容，后者移入受版本控制的目录。 |
+
+## 建议顺序
 
 ```text
-阶段 1（P0）  清理已跟踪运行产物 → 固定支持版本 → CI/安全/发布基线
-阶段 2（P1）  provider 契约矩阵 → 全 provider mock 回归 → 明确异步策略
-阶段 3（P2）  整理私有材料 → 模板与变更日志 → 文档自动校验
+发布 0.3.0 前   修复 unionchat 的 Azure 路由 → 处理 Azure Claude 与 anthropic 2.x → 真实调用验证
+发布之后        CI 与发布流程 → 补齐老 provider 的测试 → provider 能力表
+长期            异步策略 → Agent 平台 context → 社区文件
 ```
 
-每个阶段都应独立 PR：先建立可重复验证的发布基线，再做可能影响路由行为的重构。这样不会把“目录整理”与 API 兼容性风险混在同一次发布中。
+每一步单独提交 PR，先建立可重复的验证基线，再做可能影响路由行为的重构。

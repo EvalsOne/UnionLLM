@@ -1,0 +1,3 @@
+# Test dependencies (runtime dependencies come from pyproject.toml / requirements.txt).
+pytest
+python-dotenv

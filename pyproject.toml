@@ -8,7 +8,17 @@ version = "0.3.0"
 description = "A Python library for unified access to all kinds of large language models."
 license = "MIT"
 homepage = "https://github.com/EvalsOne/UnionLLM"
+repository = "https://github.com/EvalsOne/UnionLLM"
+documentation = "https://github.com/EvalsOne/UnionLLM/tree/main/docs"
 authors = ["evalsone <contact@evalsone.com>"]
+readme = "README.md"
+keywords = ["llm", "openai", "anthropic", "claude", "gemini", "azure", "deepseek", "qwen", "zhipu", "kimi"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Natural Language :: Chinese (Simplified)",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
@@ -28,3 +38,7 @@ litellm = { version = ">=1.75,<1.95", optional = true }
 
 [tool.poetry.extras]
 litellm = ["litellm"]
+
+[tool.poetry.urls]
+Changelog = "https://github.com/EvalsOne/UnionLLM/blob/main/CHANGELOG.md"
+Issues = "https://github.com/EvalsOne/UnionLLM/issues"
