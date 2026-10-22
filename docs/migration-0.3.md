@@ -56,7 +56,7 @@ LiteLLM 使用的 `AZURE_API_*` 环境变量仍然有效，原来的配置一般
 
 **模型名与部署名**
 
-模型名去掉 LiteLLM 风格的 `azure/` 前缀后，作为 Azure 部署名使用：`azure/gpt-5.4` 与 `gpt-5.4` 等价。参数改写规则按部署名判断模型家族，所以**部署名应以模型名开头**。名为 `my-deployment` 的部署会被当作普通对话模型，`reasoning_effort` 会被丢弃。
+模型名去掉 LiteLLM 风格的 `azure/` 前缀后，作为 Azure 部署名使用：`azure/gpt-5.4` 与 `gpt-5.4` 等价。参数改写规则按部署名判断模型家族，所以**部署名应以模型名开头**。名为 `my-deployment` 的部署会被当作普通对话模型，`reasoning_effort` 会被丢弃。名字像旧模型、实际部署的是推理模型时问题更明显：名为 `gpt-4o`、实际是 gpt-5.1 的部署，传 `max_tokens` 会直接得到 400（该模型只接受 `max_completion_tokens`）。LiteLLM 同样按名字判断，0.2.x 中也是如此。
 
 **参数改写**
 

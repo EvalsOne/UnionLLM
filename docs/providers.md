@@ -99,7 +99,7 @@ response = client.completion(
 | API 版本 | `api_version` | `AZURE_OPENAI_API_VERSION`、`AZURE_API_VERSION`，都没有时用 `2025-04-01-preview` |
 
 - 经 openai SDK 的 `AzureOpenAI` 调用；地址以 `/openai/v1` 结尾时改用 Azure 的 v1 API。
-- 模型名去掉 `azure/` 前缀后作为部署名。参数改写按部署名判断模型家族，所以部署名应以模型名开头。
+- 模型名去掉 `azure/` 前缀后作为部署名。参数改写按部署名判断模型家族，所以部署名应以模型名开头；名字与模型不符的部署（例如名为 `gpt-4o`、实际是 gpt-5.1）可能因参数不被接受而得到 400。
 - 模型不接受的参数会被丢弃：o 系列与 GPT-5 及以后的推理模型把 `max_tokens` 改为 `max_completion_tokens`，并丢弃不支持的采样与惩罚参数；其他模型丢弃 `reasoning_effort`。完整规则见[迁移指南](migration-0.3.md#azure-openai)。
 - 流式响应会跳过 Azure 开头那个只含 `prompt_filter_results` 的空块。
 
